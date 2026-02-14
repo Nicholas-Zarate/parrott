@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, PermissionFlagsBits, SlashCommandBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
 const client = new Client({
     intents: [
@@ -15,6 +15,13 @@ const POLL_TYPES = {
     MULTIPLE: 'multiple',
     RANKED: 'ranked',
     YES_NO: 'yes_no'
+};
+
+// Hearing poll: any user can add options via modal
+const HEARING = {
+    MAX_OPTIONS: 20,
+    OPTION_LABEL_MAX: 80,
+    MODAL_CUSTOM_ID_PREFIX: 'hearing_modal_'
 };
 
 // Minimal / ASCII theme - dark brown palette
@@ -100,15 +107,11 @@ async function registerCommands() {
                     .setRequired(true)),
         new SlashCommandBuilder()
             .setName('vote_hearing')
-            .setDescription('Quick poll: put your own question (Yes/No by default)')
+            .setDescription('Poll where any user can add options, then vote')
             .addStringOption(option =>
                 option.setName('question')
-                    .setDescription('Your question')
+                    .setDescription('The question or topic')
                     .setRequired(true))
-            .addStringOption(option =>
-                option.setName('options')
-                    .setDescription('Options separated by | (default: Yes | No)')
-                    .setRequired(false))
             .addIntegerOption(option =>
                 option.setName('duration')
                     .setDescription('Duration in minutes (0 = no limit)')
@@ -132,8 +135,49 @@ client.on('interactionCreate', async interaction => {
         await handleCommand(interaction);
     } else if (interaction.isButton()) {
         await handleButton(interaction);
+    } else if (interaction.isModalSubmit()) {
+        await handleModalSubmit(interaction);
     }
 });
+
+async function handleModalSubmit(interaction) {
+    if (!interaction.customId.startsWith(HEARING.MODAL_CUSTOM_ID_PREFIX)) return;
+    const parts = interaction.customId.split('_');
+    const messageId = parts[2];
+    const channelId = parts[3];
+    const pollData = activePolls.get(messageId);
+    if (!pollData || !pollData.isHearing) {
+        return interaction.reply({ content: 'poll ended or invalid.', ephemeral: true });
+    }
+    const optionText = interaction.fields.getTextInputValue('option_text').trim();
+    if (!optionText) {
+        return interaction.reply({ content: 'option text cannot be empty.', ephemeral: true });
+    }
+    pollData.options.push(optionText);
+    const channel = await client.channels.fetch(channelId);
+    const message = await channel.messages.fetch(messageId);
+    const embed = EmbedBuilder.from(message.embeds[0]);
+    const voteCounts = calculateVotes(pollData);
+    const totalVotes = pollData.voters.size;
+    const full = THEME.chars.barFull;
+    const empty = THEME.chars.barEmpty;
+    const optionFields = pollData.options.map((opt, i) => {
+        const votes = voteCounts[i] || 0;
+        const percentage = totalVotes > 0 ? ((votes / totalVotes) * 100).toFixed(1) : 0;
+        const filled = Math.floor(percentage / 5);
+        const bar = full.repeat(filled) + empty.repeat(20 - filled);
+        return { name: `${THEME.chars.optionPrefix(i + 1)} ${opt}`, value: `${bar}\n${votes} ${THEME.labels.votes} (${percentage}%)`, inline: false };
+    });
+    if (pollData.duration > 0) {
+        optionFields.push({ name: THEME.labels.duration, value: `${pollData.duration} min`, inline: false });
+    }
+    embed.setFields(optionFields);
+    if (embed.data.footer?.text) {
+        embed.setFooter({ text: `${embed.data.footer.text} | ${totalVotes} voters` });
+    }
+    await message.edit({ embeds: [embed], components: buildHearingRows(pollData) });
+    await interaction.reply({ content: `added: ${optionText}`, ephemeral: true });
+}
 
 async function handleCommand(interaction) {
     const { commandName } = interaction;
@@ -175,20 +219,10 @@ async function createPoll(interaction) {
 
 async function createHearingPoll(interaction) {
     const question = interaction.options.getString('question');
-    const optionsStr = interaction.options.getString('options');
     const duration = interaction.options.getInteger('duration') || 0;
     const anonymous = interaction.options.getBoolean('anonymous') || false;
-
-    let options = ['Yes', 'No'];
-    if (optionsStr) {
-        options = optionsStr.split('|').map(o => o.trim()).filter(o => o);
-        if (options.length < 2) {
-            return interaction.reply({ content: 'at least 2 options required.', ephemeral: true });
-        }
-    }
-
-    const type = options.length === 2 ? POLL_TYPES.YES_NO : POLL_TYPES.SINGLE;
-    await createPollFromParams(interaction, { type, question, options, duration, allowedRole: null, anonymous });
+    const options = [];
+    await createHearingPollMessage(interaction, { question, options, duration, anonymous });
 }
 
 async function createPollFromParams(interaction, { type, question, options, duration, allowedRole, anonymous }) {
@@ -256,6 +290,76 @@ async function createPollFromParams(interaction, { type, question, options, dura
     }
 }
 
+function buildHearingRows(pollData) {
+    const options = pollData.options;
+    const buttons = options.map((opt, i) =>
+        new ButtonBuilder()
+            .setCustomId(`vote_${i}`)
+            .setLabel(String(i + 1))
+            .setStyle(ButtonStyle.Secondary)
+    );
+    const rows = [];
+    for (let i = 0; i < buttons.length; i += 5) {
+        rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+    }
+    const controlButtons = [
+        new ButtonBuilder().setCustomId('poll_results').setLabel('Results').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('poll_end').setLabel('End').setStyle(ButtonStyle.Danger)
+    ];
+    if (pollData.isHearing && options.length < HEARING.MAX_OPTIONS) {
+        controlButtons.unshift(
+            new ButtonBuilder().setCustomId('hearing_add').setLabel('Add option').setStyle(ButtonStyle.Primary)
+        );
+    }
+    rows.push(new ActionRowBuilder().addComponents(controlButtons));
+    return rows;
+}
+
+async function createHearingPollMessage(interaction, { question, options, duration, anonymous }) {
+    const embed = new EmbedBuilder()
+        .setTitle(`${THEME.labels.poll} [hearing] ${question}`)
+        .setColor(THEME.color.primary)
+        .setDescription('anyone can add options, then vote')
+        .setFooter({ text: `${THEME.labels.by} ${interaction.user.tag} | ${anonymous ? THEME.labels.anonymous : THEME.labels.public}` })
+        .setTimestamp();
+
+    if (options.length > 0) {
+        embed.addFields(
+            options.map((opt, i) => ({ name: `${THEME.chars.optionPrefix(i + 1)} ${opt}`, value: `0 ${THEME.labels.votes}`, inline: false }))
+        );
+    } else {
+        embed.addFields({ name: '\u200b', value: '*no options yet — use Add option*', inline: false });
+    }
+    if (duration > 0) {
+        embed.addFields({ name: THEME.labels.duration, value: `${duration} min` });
+    }
+
+    const pollData = {
+        id: null,
+        question,
+        type: POLL_TYPES.SINGLE,
+        options: [...options],
+        votes: new Map(),
+        voters: new Set(),
+        allowedRole: null,
+        anonymous,
+        createdBy: interaction.user.id,
+        createdAt: Date.now(),
+        isHearing: true,
+        channelId: interaction.channelId,
+        duration
+    };
+    const rows = buildHearingRows(pollData);
+    const message = await interaction.reply({ embeds: [embed], components: rows, fetchReply: true });
+    pollData.id = message.id;
+    activePolls.set(message.id, pollData);
+
+    if (duration > 0) {
+        const channel = await client.channels.fetch(interaction.channelId);
+        setTimeout(() => endPollAuto(message.id, channel), duration * 60 * 1000);
+    }
+}
+
 function getPollDescription(type) {
     switch (type) {
         case POLL_TYPES.SINGLE:
@@ -287,6 +391,24 @@ async function handleButton(interaction) {
             return interaction.reply({ content: 'creator or manage-messages only.', ephemeral: true });
         }
         return endPollButton(interaction);
+    }
+
+    if (interaction.customId === 'hearing_add') {
+        if (!pollData.isHearing || pollData.options.length >= HEARING.MAX_OPTIONS) {
+            return interaction.reply({ content: 'cannot add more options.', ephemeral: true });
+        }
+        const modal = new ModalBuilder()
+            .setCustomId(`${HEARING.MODAL_CUSTOM_ID_PREFIX}${interaction.message.id}_${interaction.channelId}`)
+            .setTitle('Add option');
+        const input = new TextInputBuilder()
+            .setCustomId('option_text')
+            .setLabel('Option text')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('e.g. Option A')
+            .setMaxLength(HEARING.OPTION_LABEL_MAX)
+            .setRequired(true);
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        return interaction.showModal(modal);
     }
 
     // Check permissions
