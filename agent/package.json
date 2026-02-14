@@ -1,0 +1,12 @@
+{
+  "name": "discord-voting-bot",
+  "version": "1.0.0",
+  "description": "Discord voting bot with multiple poll types",
+  "main": "discord-voting-bot.js",
+  "scripts": {
+    "start": "node discord-voting-bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1"
+  }
+}
