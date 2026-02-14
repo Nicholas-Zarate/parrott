@@ -1,3 +1,3 @@
 # Root only (agent has its own package.json for the bot)
-/package.json
 /package-lock.json
+/node_modules
