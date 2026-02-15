@@ -19,6 +19,8 @@ const { createHearingPollInChannel } = require('../commands/poll/create');
 const { TIMER } = require('../config/constants');
 const { scheduleTimer } = require('../timer');
 const { check: checkTimerCreationLimit, record: recordTimerCreation } = require('../timer/rateLimit');
+const { playInVoiceChannel, getMostCommonGameInVoiceChannel } = require('../voice');
+const { generateGameRoast, FALLBACK_PHRASE } = require('../voice/gameRoast');
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
 const LOG_PREFIX = '[Parrott tools]';
@@ -320,8 +322,81 @@ function buildTools(context = {}) {
             },
         }),
 
+        join_voice_and_squawk: tool({
+            description: 'Join the user\'s voice channel and speak via text-to-speech, then leave. Use this (NOT echo) whenever the user says "say" followed by words—e.g. "say hello", "say we won", "parrott say X", "say: X". Put everything that comes AFTER "say" (or "say:") into customMessage; that exact text will be spoken in voice. For "say hello world", customMessage is "hello world". For squawk/holla/say something in VC without a specific phrase, pass empty string and the bot will roast the game people are playing. They must be in a voice channel. Max 200 characters for customMessage.',
+            parameters: z.object({
+                customMessage: z.string().describe('The words to speak in voice: everything the user said after "say" or "say:". E.g. user says "say hello everyone" → pass "hello everyone". Pass empty string only when they did NOT ask you to say something specific (then game roast is used).'),
+            }),
+            execute: async ({ customMessage }) => {
+                const channelName = message?.channel?.name ?? 'dm';
+                const authorTag = message?.author?.tag ?? 'unknown';
+                console.log(`${LOG_PREFIX} join_voice_and_squawk requested by @${authorTag} in #${channelName}`);
+
+                if (!message || !client) {
+                    console.log(`${LOG_PREFIX} join_voice_and_squawk failed: missing Discord context`);
+                    return { success: false, error: 'Missing Discord context.' };
+                }
+
+                const guild = message.guild;
+                if (!guild) {
+                    return { success: false, error: 'Voice is only available in a server. Use this in a server channel.' };
+                }
+
+                const member = message.member ?? await guild.members.fetch(message.author.id).catch(() => null);
+                if (!member) {
+                    return { success: false, error: 'Could not find you in this server.' };
+                }
+
+                const voiceChannel = member.voice?.channel;
+                if (!voiceChannel) {
+                    console.log(`${LOG_PREFIX} join_voice_and_squawk skipped: @${authorTag} not in a voice channel`);
+                    return {
+                        success: false,
+                        error: "You're not in a voice channel. Join a voice channel first, then ask again.",
+                        hint: 'Tell the user to join a voice channel and say the same thing again.',
+                    };
+                }
+
+                const MAX_CUSTOM_LEN = 200;
+                const custom = typeof customMessage === 'string' ? customMessage.trim() : '';
+                let textToSpeak;
+                if (custom.length > 0) {
+                    if (custom.length > MAX_CUSTOM_LEN) {
+                        return {
+                            success: false,
+                            error: `Message too long (max ${MAX_CUSTOM_LEN} characters).`,
+                            hint: 'Tell the user to keep it shorter.',
+                        };
+                    }
+                    textToSpeak = custom;
+                    console.log(`${LOG_PREFIX} join_voice_and_squawk custom say: "${textToSpeak.slice(0, 50)}${textToSpeak.length > 50 ? '…' : ''}"`);
+                } else {
+                    const game = getMostCommonGameInVoiceChannel(voiceChannel, client.user?.id);
+                    console.log(`${LOG_PREFIX} join_voice_and_squawk game in VC: ${game ?? 'none'}`);
+                    textToSpeak = await generateGameRoast(game || '');
+                }
+                if (!textToSpeak || !String(textToSpeak).trim()) {
+                    textToSpeak = FALLBACK_PHRASE;
+                }
+
+                console.log(`${LOG_PREFIX} join_voice_and_squawk joining VC "${voiceChannel.name}" for @${authorTag}`);
+                try {
+                    const result = await playInVoiceChannel(client, voiceChannel, { type: 'tts', text: textToSpeak });
+                    if (result.success) {
+                        console.log(`${LOG_PREFIX} join_voice_and_squawk success for @${authorTag}`);
+                        return { success: true, message: 'Joined, spoke, and left.' };
+                    }
+                    console.log(`${LOG_PREFIX} join_voice_and_squawk failed: ${result.error}`);
+                    return { success: false, error: result.error || 'Failed to play sound.' };
+                } catch (err) {
+                    console.error(`${LOG_PREFIX} join_voice_and_squawk error:`, err?.message || err);
+                    return { success: false, error: err?.message || 'Voice error. Try again.' };
+                }
+            },
+        }),
+
         echo: tool({
-            description: 'Echo back a short message. Use only when the user explicitly asks to echo or repeat something.',
+            description: 'Echo back a short message in chat only. Use ONLY when they say "echo" or "repeat" (e.g. "echo this", "repeat after me"). Do NOT use echo when they say "say"—for "say X" use join_voice_and_squawk with customMessage X so it is spoken in voice.',
             parameters: z.object({
                 text: z.string().describe('The short text to echo back'),
             }),
