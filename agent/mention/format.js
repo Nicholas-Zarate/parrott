@@ -13,6 +13,21 @@ const RECENT_MESSAGES_ABOVE_MAX_CHARS = 1500;
 const RECENT_MESSAGE_SNIPPET_LEN = 300;
 
 /**
+ * Discord stores @mentions in message content as <@userId> or <@!userId>.
+ * The gateway sometimes omits the bot from message.mentions.users when the bot is @mentioned,
+ * so we use content as the source of truth for "was the bot mentioned?".
+ *
+ * @param {string} content - message.content
+ * @param {string} [botUserId] - client.user.id
+ * @returns {boolean}
+ */
+function isBotMentionedInContent(content, botUserId) {
+    if (!content || !botUserId) return false;
+    const mentionPattern = new RegExp(`<@!?${botUserId}>`);
+    return mentionPattern.test(content);
+}
+
+/**
  * Strip bot mentions from content (e.g. <@123456>) so we don't send raw IDs to the model.
  * @param {string} content
  * @param {import('discord.js').User} botUser
@@ -115,6 +130,7 @@ module.exports = {
     formatMessageForParrot,
     getRecentMessagesAboveForParrot,
     buildUserContentForParrot,
+    isBotMentionedInContent,
     MAX_MESSAGE_CONTENT_LENGTH,
     RECENT_MESSAGES_ABOVE_LIMIT,
     RECENT_MESSAGES_ABOVE_MAX_CHARS

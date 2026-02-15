@@ -4,6 +4,7 @@ const poll = require('./commands/poll');
 const analysis = require('./analysis');
 const roast = require('./commands/roast');
 const mention = require('./mention');
+const { isBotMentionedInContent } = require('./mention/format');
 
 /** Discord permission integer for the bot invite URL (OAuth2). Override with INVITE_PERMISSIONS in .env if needed. */
 const INVITE_PERMISSIONS = process.env.INVITE_PERMISSIONS || '562955322199104';
@@ -75,11 +76,42 @@ client.on('messageCreate', async (message) => {
             return;
         }
     }
+    // Fetch partial channel so allowlist can read channel.name (first message in an uncached channel would otherwise fail)
+    if (message.channel?.partial) {
+        try {
+            await message.channel.fetch();
+        } catch (err) {
+            console.error('[messageCreate] Failed to fetch partial channel:', err.message);
+            return;
+        }
+    }
     const ch = message.channel;
     const chName = ch?.parent ? ch.parent.name : ch?.name;
     const mentionCount = message.mentions?.users?.size ?? 0;
-    const botMentioned = mentionCount > 0 && message.mentions.users.has(client.user?.id);
-    console.log(`[Debug] messageCreate #${chName ?? '?'} | mentions: ${mentionCount} | bot mentioned: ${botMentioned}`);
+    const content = message.content ?? '';
+    const botId = client.user?.id;
+    const fromContent = isBotMentionedInContent(content, botId);
+    const fromMentions = mentionCount > 0 && message.mentions.users.has(botId);
+    let fromRole = false;
+    try {
+        fromRole = await mention.isBotMentionedByRole(message, client);
+    } catch (e) {
+        console.error('[messageCreate] isBotMentionedByRole error:', e?.message);
+    }
+    const botMentioned = fromContent || fromMentions || fromRole;
+
+    // Diagnostic when there are user/role mentions but we didn't detect the bot (so we can see why)
+    const hasAnyMentions = mentionCount > 0 || (message.mentions?.roles?.size ?? 0) > 0;
+    if (hasAnyMentions && !botMentioned) {
+        const preview = content.length === 0 ? '(empty)' : content.slice(0, 120).replace(/\n/g, ' ');
+        console.log(`[Debug] mention check failed | content length: ${content.length} | content preview: ${preview} | bot id: ${botId ?? 'missing'}`);
+        if (content.length === 0) {
+            console.log('[Debug] Message content is empty. Enable "Message Content Intent" in Developer Portal → your app → Bot → Privileged Gateway Intents, then re-invite the bot.');
+        }
+    }
+
+    const authorLabel = message.author?.username ?? message.author?.id ?? '?';
+    console.log(`[Debug] messageCreate #${chName ?? '?'} @${authorLabel} | mentions (API): ${mentionCount} | bot mentioned: ${botMentioned}`);
     mention.handleMention(message, client);
 });
 

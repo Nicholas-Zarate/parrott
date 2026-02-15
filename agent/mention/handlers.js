@@ -1,6 +1,6 @@
 const { isChannelAllowed, getChannelTier } = require('./config');
-const { buildUserContentForParrot } = require('./format');
-const { checkAndRecord } = require('./rateLimit');
+const { buildUserContentForParrot, isBotMentionedInContent } = require('./format');
+const { checkAndRecord, getRetryAfterSeconds, plural } = require('./rateLimit');
 const parrotConfig = require('../config/parrot');
 const { getOpenAIErrorMessage } = require('../commands/roast/openai');
 const { chatWithTools } = require('../ai-sdk/with-tools');
@@ -26,9 +26,22 @@ async function onMention(message, client) {
     if (userId) {
         const { allowed, retryAfterSeconds } = checkAndRecord(userId, tier);
         if (!allowed) {
-            const restingMsg = `juan second fam, i'm resting (wait ${retryAfterSeconds} second ninja)`;
+            const restingMsg = `juan second fam, i'm resting (wait ${plural(retryAfterSeconds)} ninja)`;
             console.log(`[Mention] Rate limited ${userId} (tier=${tier}), retry in ${retryAfterSeconds}s`);
-            return message.reply(restingMsg).catch(() => {});
+            const replyMsg = await message.reply(restingMsg).catch(() => null);
+            if (replyMsg) {
+                const intervalMs = 15 * 1000;
+                const intervalId = setInterval(async () => {
+                    const secondsLeft = getRetryAfterSeconds(userId, tier);
+                    if (secondsLeft <= 0) {
+                        clearInterval(intervalId);
+                        await replyMsg.edit("juan second fam, you can try again now.").catch(() => {});
+                        return;
+                    }
+                    await replyMsg.edit(`juan second fam, i'm resting (wait ${plural(secondsLeft)} ninja)`).catch(() => {});
+                }, intervalMs);
+            }
+            return;
         }
     }
 
@@ -78,12 +91,35 @@ async function onMention(message, client) {
 }
 
 /**
+ * True if the message @mentions a role that the bot has in this guild (e.g. <@&roleId>).
+ * Used when people @mention a role like "Parrott" instead of the bot user directly.
+ *
+ * @param {import('discord.js').Message} message
+ * @param {import('discord.js').Client} client
+ * @returns {Promise<boolean>}
+ */
+async function isBotMentionedByRole(message, client) {
+    if (!message.guild || !client.user?.id) return false;
+    const roles = message.mentions?.roles;
+    if (!roles || roles.size === 0) return false;
+    const member = message.guild.members.cache.get(client.user.id) ?? await message.guild.members.fetch(client.user.id).catch(() => null);
+    if (!member?.roles?.cache) return false;
+    for (const [roleId] of roles) {
+        if (member.roles.cache.has(roleId)) return true;
+    }
+    return false;
+}
+
+/**
  * Handles messageCreate: only runs onMention when the bot is @mentioned in an allowed channel.
- * Caller (discord-voting-bot.js) should fetch partial messages so content and mentions are available.
+ * Bot can be mentioned by: (1) user mention in content or mentions.users, (2) role mention (any role the bot has).
  */
 async function handleMention(message, client) {
     if (message.author.bot) return;
-    if (!message.mentions.users.has(client.user.id)) return;
+    const byUser = isBotMentionedInContent(message.content, client.user?.id) || message.mentions.users.has(client.user?.id);
+    const byRole = await isBotMentionedByRole(message, client);
+    const botMentioned = byUser || byRole;
+    if (!botMentioned) return;
 
     const ch = message.channel;
     const channelLabel = ch?.parent ? `#${ch.parent.name} (thread: ${ch.name})` : `#${ch?.name ?? 'dm'}`;
@@ -102,5 +138,6 @@ async function handleMention(message, client) {
 
 module.exports = {
     handleMention,
-    onMention
+    onMention,
+    isBotMentionedByRole
 };
