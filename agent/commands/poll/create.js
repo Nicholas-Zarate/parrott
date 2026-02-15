@@ -111,7 +111,7 @@ function buildHearingPollContent(question, options, duration, anonymous, userTag
     const embed = new EmbedBuilder()
         .setTitle(question)
         .setColor(THEME.color.hearing ?? THEME.color.primary)
-        .setDescription(`${THEME.labels.poll} [hearing]\n\nPRESS ADD OPTION`)
+        .setDescription(`${THEME.labels.poll} [hearing]\n\n---------`)
         .setFooter({ text: `${THEME.labels.by} ${userTag} | ${anonymous ? THEME.labels.anonymous : THEME.labels.public}` })
         .setTimestamp();
 

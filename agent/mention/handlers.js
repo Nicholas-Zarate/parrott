@@ -27,16 +27,27 @@ async function onMention(message, client) {
         { role: 'user', content: userContext }
     ];
 
+    // Reply immediately so the user sees something while tools/LLM run (AI SDK has no "before tool" callback).
+    const placeholderText = 'juan second...';
+    let replyMsg;
+    try {
+        replyMsg = await message.reply(placeholderText);
+    } catch (e) {
+        console.error('[Mention] Failed to send placeholder:', e?.message);
+        return;
+    }
+
     try {
         const { text } = await chatWithTools(messages, { message, client }, {
             model: parrotConfig.model,
             maxTokens: Math.max(parrotConfig.max_completion_tokens ?? 150, 250)
         });
-        await message.reply(text?.trim() || 'SQUAWK.');
+        const finalContent = text?.trim() || 'SQUAWK.';
+        await replyMsg.edit(finalContent);
     } catch (err) {
         console.error('[Mention] OpenAI/tools error:', err.message || err, err.detail || '');
         const userMsg = getOpenAIErrorMessage(err);
-        await message.reply(userMsg).catch(() => {});
+        await replyMsg.edit(userMsg).catch(() => {});
     }
 }
 
