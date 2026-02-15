@@ -1,4 +1,4 @@
-const roastConfig = require('../config/roast');
+const roastConfig = require('../../config/roast');
 
 /**
  * Format user data into a single LLM-ingestible text block.

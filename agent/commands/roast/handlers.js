@@ -1,5 +1,5 @@
-const { resolveGuild } = require('../util/guild');
-const roastConfig = require('../config/roast');
+const { resolveGuild } = require('../../util/guild');
+const roastConfig = require('../../config/roast');
 const { checkAndRecord } = require('./rateLimit');
 const { collectUserDataForRoast } = require('./collect');
 const { formatUserDataForLLM } = require('./format');

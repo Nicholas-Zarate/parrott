@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
-const roastConfig = require('../config/roast');
+const roastConfig = require('../../config/roast');
 
 function getRoastCommands() {
     return [

@@ -1,4 +1,4 @@
-const roastConfig = require('../config/roast');
+const roastConfig = require('../../config/roast');
 
 /** @type {Map<string, number[]>} userId -> timestamps of /roast uses in current window */
 const useTimestamps = new Map();
