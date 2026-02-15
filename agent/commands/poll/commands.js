@@ -1,5 +1,5 @@
 const { PermissionFlagsBits, SlashCommandBuilder } = require('discord.js');
-const { POLL_TYPES, HEARING } = require('../config/constants');
+const { POLL_TYPES, HEARING } = require('../../config/constants');
 
 function getPollCommands() {
     return [

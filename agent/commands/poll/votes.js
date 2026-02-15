@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { POLL_TYPES, THEME } = require('../config/constants');
+const { POLL_TYPES, THEME } = require('../../config/constants');
 
 function getPollDescription(type) {
     switch (type) {

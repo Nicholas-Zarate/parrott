@@ -1,5 +1,5 @@
 const { ActionRowBuilder, ButtonBuilder, EmbedBuilder, ModalBuilder, PermissionFlagsBits, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { POLL_TYPES, HEARING, THEME } = require('../config/constants');
+const { POLL_TYPES, HEARING, THEME } = require('../../config/constants');
 const { getPoll } = require('./store');
 const { createPollFromParams, createHearingPollMessage, buildHearingRows } = require('./create');
 const { updatePollEmbed } = require('./votes');

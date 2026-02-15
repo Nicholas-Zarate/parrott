@@ -3,3 +3,5 @@
 /node_modules
 # Local env (never commit secrets; set OPENAI_API_KEY for /roast)
 .env
+# Instruction sets and plan docs (see /instructions)
+instructions/

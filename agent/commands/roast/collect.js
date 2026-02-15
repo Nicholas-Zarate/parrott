@@ -1,5 +1,5 @@
-const roastConfig = require('../config/roast');
-const { collectGuildData } = require('../analysis/collector');
+const roastConfig = require('../../config/roast');
+const { collectGuildData } = require('../../analysis/collector');
 
 const ACTIVITY_TYPE_LABELS = ['Playing', 'Streaming', 'Listening to', 'Watching', 'Custom', 'Competing in'];
 

@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { THEME } = require('../config/constants');
+const { THEME } = require('../../config/constants');
 const { getPoll, deletePoll } = require('./store');
 const { calculateVotes } = require('./votes');
 
