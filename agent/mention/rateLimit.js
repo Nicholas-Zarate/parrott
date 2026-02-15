@@ -13,7 +13,7 @@ const mentionTimestamps = new Map();
 
 const TIER_CONFIG = {
     [TIER_SEMI]: { windowMinutes: 2, maxMentions: 5 },
-    [TIER_LIMITED]: { windowMinutes: 5, maxMentions: 1 },
+    [TIER_LIMITED]: { windowMinutes: 5, maxMentions: 4 },
 };
 
 /**
@@ -51,4 +51,30 @@ function checkAndRecord(userId, tier) {
     return { allowed: true };
 }
 
-module.exports = { checkAndRecord };
+/**
+ * Get remaining seconds until this user can mention again for the given tier.
+ * Does not record anything. Returns 0 if user is not currently over limit.
+ *
+ * @param {string} userId
+ * @param {string} tier
+ * @returns {number}
+ */
+function getRetryAfterSeconds(userId, tier) {
+    if (tier === TIER_UNLIMITED) return 0;
+    const config = TIER_CONFIG[tier] || TIER_CONFIG[TIER_SEMI];
+    const WINDOW_MS = config.windowMinutes * 60 * 1000;
+    const MAX_MENTIONS = config.maxMentions;
+    const key = `${userId}|${tier}`;
+    const now = Date.now();
+    const timestamps = (mentionTimestamps.get(key) || []).filter(t => now - t < WINDOW_MS);
+    if (timestamps.length < MAX_MENTIONS) return 0;
+    const oldestInWindow = timestamps[0];
+    const rawSeconds = (oldestInWindow + WINDOW_MS - now) / 1000;
+    return Math.max(0, Math.ceil(rawSeconds));
+}
+
+function plural(seconds) {
+    return seconds === 1 ? '1 second' : `${seconds} seconds`;
+}
+
+module.exports = { checkAndRecord, getRetryAfterSeconds, plural };
