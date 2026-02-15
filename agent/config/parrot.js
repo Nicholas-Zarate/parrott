@@ -17,11 +17,15 @@ function buildSystemPrompt(sections, order) {
     return order.map((key) => sections[key]).filter(Boolean).join(' ');
 }
 
+/** Rate limit for @mentions: max mentions per user per window. */
+const mentionRateLimit = { windowMinutes: 2, maxMentions: 5 };
+
 module.exports = {
     /** Use gpt-5.2 or gpt-5.2-chat-latest for latest. Requires max_completion_tokens (max_tokens not supported for gpt-5.2). */
     model: 'gpt-5.2',
     max_completion_tokens: 150,
     max_prompt_tokens: 1000,
+    mentionRateLimit,
     systemPromptSections,
     systemPromptOrder,
     systemPromptOrderWithTools,
