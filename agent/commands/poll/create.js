@@ -109,9 +109,9 @@ async function createPollFromParams(interaction, { type, question, options, dura
  */
 function buildHearingPollContent(question, options, duration, anonymous, userTag, userId, channelId) {
     const embed = new EmbedBuilder()
-        .setTitle(`${THEME.labels.poll} [hearing] ${question}`)
-        .setColor(THEME.color.primary)
-        .setDescription('anyone can add options, then vote')
+        .setTitle(question)
+        .setColor(THEME.color.hearing ?? THEME.color.primary)
+        .setDescription(`${THEME.labels.poll} [hearing]\n\nPRESS ADD OPTION`)
         .setFooter({ text: `${THEME.labels.by} ${userTag} | ${anonymous ? THEME.labels.anonymous : THEME.labels.public}` })
         .setTimestamp();
 
@@ -119,8 +119,6 @@ function buildHearingPollContent(question, options, duration, anonymous, userTag
         embed.addFields(
             options.map((opt, i) => ({ name: `${THEME.chars.optionPrefix(i + 1)} ${opt}`, value: `0 ${THEME.labels.votes}`, inline: false }))
         );
-    } else {
-        embed.addFields({ name: '\u200b', value: '*no options yet — use Add option*', inline: false });
     }
     if (duration > 0) {
         embed.addFields({ name: THEME.labels.duration, value: `${duration} min` });

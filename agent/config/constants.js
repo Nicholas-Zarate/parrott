@@ -13,10 +13,11 @@ const HEARING = {
     MODAL_CUSTOM_ID_PREFIX: 'hearing_modal_'
 };
 
-// Minimal / ASCII theme - dark brown palette
+// Minimal / ASCII theme - dark brown palette. Discord embeds only support a single accent color (sidebar).
 const THEME = {
     color: {
         primary: 0x362925,
+        hearing: 0x2e7d6e,   // teal accent for hearing polls (sidebar)
         ended: 0x2c2019
     },
     chars: {
