@@ -14,10 +14,10 @@ const TIER_LIMITED = 'limited';
 
 /** Channel name (lowercase key) -> tier. Defines both allowlist and rate-limit tier. */
 const MENTION_CHANNEL_TIERS = {
-    general: TIER_UNLIMITED,
+    general: TIER_LIMITED,
     testing: TIER_UNLIMITED,
     parrott: TIER_SEMI,
-    finals: TIER_SEMI,
+    finals: TIER_LIMITED,
 };
 
 /** Allowed channel names (for allowlist when not using MENTION_CHANNEL_IDS). */
