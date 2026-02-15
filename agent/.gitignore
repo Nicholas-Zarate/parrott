@@ -8,3 +8,4 @@ instructions/
 # Agent instruction/plan docs (do not commit)
 INSTRUCTIONS.md
 ../instructions/PLAN_TIMER_TOOL.md
+instructions/PLAN_ELEVENLABS_TTS.md

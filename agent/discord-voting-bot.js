@@ -6,7 +6,7 @@ const roast = require('./commands/roast');
 const mention = require('./mention');
 const { isBotMentionedInContent } = require('./mention/format');
 
-/** Discord permission integer for the bot invite URL (OAuth2). Override with INVITE_PERMISSIONS in .env if needed. */
+/** Discord permission integer for the bot invite URL (OAuth2). Override with INVITE_PERMISSIONS in .env if needed. Voice (squawk) needs Connect + Speak; re-invite with permissions that include those if the bot cannot join VC. */
 const INVITE_PERMISSIONS = process.env.INVITE_PERMISSIONS || '562955322199104';
 
 const client = new Client({
@@ -15,7 +15,8 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildPresences,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates
     ],
     // Required so messageCreate fires for messages in channels the bot hasn't cached (per discord.js guide)
     partials: [Partials.Channel, Partials.Message]
