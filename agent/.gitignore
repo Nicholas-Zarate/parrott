@@ -5,3 +5,6 @@
 .env
 # Instruction sets and plan docs (see /instructions)
 instructions/
+# Agent instruction/plan docs (do not commit)
+INSTRUCTIONS.md
+../instructions/PLAN_TIMER_TOOL.md
