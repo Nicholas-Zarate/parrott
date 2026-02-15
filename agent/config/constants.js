@@ -38,6 +38,20 @@ const THEME = {
     }
 };
 
+// Timer/reminder tool (create_timer via @mention)
+const TIMER = {
+    MIN_DURATION_MINUTES: 1,
+    MAX_DURATION_MINUTES: 1440, // 24 hours
+    MAX_REMINDER_LENGTH: 500,
+    MAX_ACTIVE_PER_USER: 5,
+    CREATION_WINDOW_MINUTES: 5,
+    CREATION_MAX_PER_WINDOW: 3,
+    // Popeyes timer: base 10m + random 2–15m (total 12–25 min)
+    POPEYES_BASE_MINUTES: 10,
+    POPEYES_RANDOM_MIN_MINUTES: 2,
+    POPEYES_RANDOM_MAX_MINUTES: 15,
+};
+
 // Analysis defaults
 const ANALYSIS = {
     DEFAULT_DAYS: 7,
@@ -47,4 +61,4 @@ const ANALYSIS = {
     TOP_N_MINIMAL: 5
 };
 
-module.exports = { POLL_TYPES, HEARING, THEME, ANALYSIS };
+module.exports = { POLL_TYPES, HEARING, THEME, TIMER, ANALYSIS };
