@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.0.0",
+    "@supabase/supabase-js": "^2.95.3",
     "ai": "^4.0.0",
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",

@@ -3,6 +3,7 @@ const { buildUserContentForParrot } = require('./format');
 const parrotConfig = require('../config/parrot');
 const { getOpenAIErrorMessage } = require('../commands/roast/openai');
 const { chatWithTools } = require('../ai-sdk/with-tools');
+const { saveConversation, getToolsCalledFromSteps } = require('../supabase/conversation-history');
 
 /**
  * Runs when someone mentions the bot in an allowed channel.
@@ -39,12 +40,23 @@ async function onMention(message, client) {
     }
 
     try {
-        const { text } = await chatWithTools(messages, { message, client }, {
+        const { text, steps } = await chatWithTools(messages, { message, client }, {
             model: parrotConfig.model,
             maxTokens: Math.max(parrotConfig.max_completion_tokens ?? 150, 250)
         });
         const finalContent = text?.trim() || 'SQUAWK.';
         await replyMsg.edit(finalContent);
+
+        const toolsCalled = getToolsCalledFromSteps(steps);
+        await saveConversation({
+            previous_message_id: message.id,
+            reply_message_id: replyMsg.id,
+            channel_id: message.channelId,
+            guild_id: message.guildId ?? null,
+            user_text: fullUserContent,
+            response_text: finalContent,
+            tools_called: toolsCalled,
+        });
     } catch (err) {
         console.error('[Mention] OpenAI/tools error:', err.message || err, err.detail || '');
         const userMsg = getOpenAIErrorMessage(err);
