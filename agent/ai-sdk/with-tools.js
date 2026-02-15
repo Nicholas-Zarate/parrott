@@ -105,7 +105,7 @@ function buildTools(context = {}) {
         }),
 
         search_web: tool({
-            description: 'Search the web for current information, facts, or research. Use when the user asks to look something up, research a topic, get recent news, or find facts. Returns titles, URLs, and short snippets.',
+            description: 'Search the web for current information, facts, or research. Use when the user asks to look something up, research a topic, get recent news, find facts, says "find out" (e.g. find out about X), or "search online". Returns titles, URLs, and short snippets.',
             parameters: z.object({
                 query: z.string().min(1).describe('The search query (e.g. "current weather NYC", "who won the 2024 election")'),
             }),

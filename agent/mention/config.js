@@ -3,7 +3,7 @@
  * - If MENTION_CHANNEL_IDS is set (comma-separated Discord channel IDs), only those channels are allowed.
  * - Otherwise, only channels whose name is in DEFAULT_MENTION_CHANNEL_NAMES (e.g. #parrott, #testing) are allowed.
  */
-const DEFAULT_MENTION_CHANNEL_NAMES = ['parrott', 'testing', 'general'];
+const DEFAULT_MENTION_CHANNEL_NAMES = ['parrott', 'testing', 'general', 'finals'];
 
 const envIds = process.env.MENTION_CHANNEL_IDS;
 const allowedChannelIds = envIds ? envIds.split(',').map((id) => id.trim()).filter(Boolean) : null;
