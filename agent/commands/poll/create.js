@@ -1,7 +1,8 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { POLL_TYPES, HEARING, THEME } = require('../../config/constants');
 const { getPollDescription } = require('./votes');
-const { getPoll, setPoll } = require('./store');
+const { setPoll } = require('./store');
+const results = require('./results');
 
 function buildHearingRows(pollData) {
     const options = pollData.options;
@@ -94,12 +95,24 @@ async function createPollFromParams(interaction, { type, question, options, dura
     }
 }
 
-async function createHearingPollMessage(interaction, { question, options, duration, anonymous }, client, endPollAuto) {
+/**
+ * Build embed, pollData (id set to null), and button rows for a hearing poll.
+ * Used by both slash-command and channel (e.g. mention/tool) flows.
+ * @param {string} question
+ * @param {string[]} options
+ * @param {number} duration - minutes, 0 = no limit
+ * @param {boolean} anonymous
+ * @param {string} userTag - creator display (e.g. user.tag)
+ * @param {string} userId - creator Discord ID
+ * @param {string} channelId
+ * @returns {{ embed: EmbedBuilder, pollData: object, rows: ActionRowBuilder[] }}
+ */
+function buildHearingPollContent(question, options, duration, anonymous, userTag, userId, channelId) {
     const embed = new EmbedBuilder()
         .setTitle(`${THEME.labels.poll} [hearing] ${question}`)
         .setColor(THEME.color.primary)
         .setDescription('anyone can add options, then vote')
-        .setFooter({ text: `${THEME.labels.by} ${interaction.user.tag} | ${anonymous ? THEME.labels.anonymous : THEME.labels.public}` })
+        .setFooter({ text: `${THEME.labels.by} ${userTag} | ${anonymous ? THEME.labels.anonymous : THEME.labels.public}` })
         .setTimestamp();
 
     if (options.length > 0) {
@@ -122,13 +135,26 @@ async function createHearingPollMessage(interaction, { question, options, durati
         voters: new Set(),
         allowedRole: null,
         anonymous,
-        createdBy: interaction.user.id,
+        createdBy: userId,
         createdAt: Date.now(),
         isHearing: true,
-        channelId: interaction.channelId,
+        channelId,
         duration
     };
     const rows = buildHearingRows(pollData);
+    return { embed, pollData, rows };
+}
+
+async function createHearingPollMessage(interaction, { question, options, duration, anonymous }, client, endPollAuto) {
+    const { embed, pollData, rows } = buildHearingPollContent(
+        question,
+        options ?? [],
+        duration ?? 0,
+        anonymous ?? false,
+        interaction.user.tag,
+        interaction.user.id,
+        interaction.channelId
+    );
     const message = await interaction.reply({ embeds: [embed], components: rows, fetchReply: true });
     pollData.id = message.id;
     setPoll(message.id, pollData);
@@ -139,8 +165,40 @@ async function createHearingPollMessage(interaction, { question, options, durati
     }
 }
 
+/**
+ * Create a hearing poll by sending a message in the given channel (e.g. when triggered via @mention/tool).
+ * Same behavior as /vote_hearing but without a slash interaction.
+ * @param {import('discord.js').TextChannel} channel
+ * @param {import('discord.js').User} user - creator
+ * @param {{ question: string, duration?: number, anonymous?: boolean }} params
+ * @param {import('discord.js').Client} client
+ * @returns {Promise<{ success: boolean, messageId?: string, error?: string }>}
+ */
+async function createHearingPollInChannel(channel, user, { question, duration = 0, anonymous = false }, client) {
+    const options = [];
+    const { embed, pollData, rows } = buildHearingPollContent(
+        question,
+        options,
+        duration,
+        anonymous,
+        user.tag,
+        user.id,
+        channel.id
+    );
+    const message = await channel.send({ embeds: [embed], components: rows });
+    pollData.id = message.id;
+    setPoll(message.id, pollData);
+
+    if (duration > 0 && client) {
+        setTimeout(() => results.endPollAuto(message.id, channel), duration * 60 * 1000);
+    }
+    return { success: true, messageId: message.id };
+}
+
 module.exports = {
     buildHearingRows,
+    buildHearingPollContent,
     createPollFromParams,
-    createHearingPollMessage
+    createHearingPollMessage,
+    createHearingPollInChannel
 };

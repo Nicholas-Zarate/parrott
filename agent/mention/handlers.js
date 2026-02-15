@@ -1,11 +1,13 @@
 const { isChannelAllowed } = require('./config');
 const { formatMessageForParrot } = require('./format');
 const parrotConfig = require('../config/parrot');
-const { requestChat, getOpenAIErrorMessage } = require('../commands/roast/openai');
+const { getOpenAIErrorMessage } = require('../commands/roast/openai');
+const { chatWithTools } = require('../ai-sdk/with-tools');
 
 /**
  * Runs when someone mentions the bot in an allowed channel.
- * Formats the message as context, calls OpenAI with the parrot personality, and replies.
+ * Uses chatWithTools so the parrot can run commands (e.g. create_hearing_poll, run_roast).
+ * Terminal logs: [Mention] and [Parrott tools] for debugging and to guide users when params are missing.
  *
  * @param {import('discord.js').Message} message - The message that mentioned the bot
  * @param {import('discord.js').Client} client - The bot client
@@ -21,19 +23,18 @@ async function onMention(message, client) {
 
     const userContext = formatMessageForParrot(message, client.user);
     const messages = [
-        { role: 'system', content: parrotConfig.systemPrompt },
+        { role: 'system', content: parrotConfig.systemPromptWithTools },
         { role: 'user', content: userContext }
     ];
 
     try {
-        const { content } = await requestChat(messages, {
+        const { text } = await chatWithTools(messages, { message, client }, {
             model: parrotConfig.model,
-            max_completion_tokens: parrotConfig.max_completion_tokens,
-            max_tokens: parrotConfig.max_tokens
+            maxTokens: Math.max(parrotConfig.max_completion_tokens ?? 150, 250)
         });
-        await message.reply(content || 'SQUAWK.');
+        await message.reply(text?.trim() || 'SQUAWK.');
     } catch (err) {
-        console.error('Mention OpenAI error:', err.message || err, err.detail || '');
+        console.error('[Mention] OpenAI/tools error:', err.message || err, err.detail || '');
         const userMsg = getOpenAIErrorMessage(err);
         await message.reply(userMsg).catch(() => {});
     }
