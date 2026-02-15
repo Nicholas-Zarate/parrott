@@ -1,6 +1,8 @@
+require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const poll = require('./poll');
 const analysis = require('./analysis');
+const roast = require('./roast');
 
 const client = new Client({
     intents: [
@@ -16,7 +18,8 @@ client.on('ready', async () => {
     client.guilds.cache.forEach(g => console.log(`  - ${g.name} (${g.id})`));
     const pollCommands = poll.getPollCommands();
     const analysisCommandsList = analysis.getAnalysisCommands();
-    const allCommands = [...pollCommands, ...analysisCommandsList];
+    const roastCommandsList = roast.getRoastCommands();
+    const allCommands = [...pollCommands, ...analysisCommandsList, ...roastCommandsList];
     try {
         await client.application.commands.set(allCommands);
         console.log('Slash commands registered!');
@@ -33,6 +36,9 @@ client.on('interactionCreate', async interaction => {
         }
         if (name === 'analysis_mini') {
             return analysis.handleAnalysisMini(interaction, client);
+        }
+        if (name === 'roast') {
+            return roast.handleRoast(interaction, client);
         }
     }
 

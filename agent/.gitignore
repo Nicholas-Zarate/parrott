@@ -1,3 +1,5 @@
 # Root only (agent has its own package.json for the bot)
 /package-lock.json
 /node_modules
+# Local env (never commit secrets; set OPENAI_API_KEY for /roast)
+.env
