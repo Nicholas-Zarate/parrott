@@ -1,4 +1,4 @@
-const { isChannelAllowed } = require('./config');
+const { isChannelAllowed, getChannelTier } = require('./config');
 const { buildUserContentForParrot } = require('./format');
 const { checkAndRecord } = require('./rateLimit');
 const parrotConfig = require('../config/parrot');
@@ -8,7 +8,7 @@ const { saveConversation, getToolsCalledFromSteps } = require('../supabase/conve
 
 /**
  * Runs when someone mentions the bot in an allowed channel.
- * Rate limited per user (config.mentionRateLimit: 5 per 2 min); when over limit replies with resting message and returns.
+ * Rate limited per user and per channel tier (unlimited / semi: 5 per 2 min / limited: 1 per 5 min); when over limit replies with resting message and returns.
  * Uses chatWithTools so the parrot can run commands (e.g. create_hearing_poll, run_roast).
  * Expects message to be full (not partial); discord-voting-bot.js fetches partials before calling.
  * Terminal logs: [Mention] and [Parrott tools] for debugging and to guide users when params are missing.
@@ -21,12 +21,13 @@ async function onMention(message, client) {
     const authorTag = message.author?.tag ?? message.author?.id ?? 'unknown';
     console.log(`[Mention] #${channelName} @${authorTag}: ${message.content ?? '(no content)'}`);
 
+    const tier = getChannelTier(message.channel);
     const userId = message.author?.id;
     if (userId) {
-        const { allowed, retryAfterSeconds } = checkAndRecord(userId);
+        const { allowed, retryAfterSeconds } = checkAndRecord(userId, tier);
         if (!allowed) {
             const restingMsg = `juan second fam, i'm resting (wait ${retryAfterSeconds} second ninja)`;
-            console.log(`[Mention] Rate limited ${userId}, retry in ${retryAfterSeconds}s`);
+            console.log(`[Mention] Rate limited ${userId} (tier=${tier}), retry in ${retryAfterSeconds}s`);
             return message.reply(restingMsg).catch(() => {});
         }
     }
