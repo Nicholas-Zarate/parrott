@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { THEME } = require('../config/constants');
 const { ANALYSIS } = require('../config/constants');
+const { resolveGuild } = require('../util/guild');
 const { collectGuildData } = require('./collector');
 const { buildFullReport, buildMinimalReport } = require('./report');
 
@@ -9,29 +10,6 @@ const EMBED_FIELD_MAX = 1024;
 function truncate(str, max = EMBED_FIELD_MAX) {
     if (typeof str !== 'string') return str;
     return str.length <= max ? str : str.slice(0, max - 3) + '...';
-}
-
-async function resolveGuild(interaction, client) {
-    console.log(`resolveGuild: guildId=${interaction.guildId}, channelId=${interaction.channelId}, guild cached=${!!interaction.guild}, guilds in cache=${client.guilds.cache.size}`);
-    if (interaction.guild) return interaction.guild;
-    if (!interaction.guildId) return null;
-    // Fetch the channel the command was run in — the bot always has access to it
-    try {
-        const channel = await client.channels.fetch(interaction.channelId);
-        console.log(`resolveGuild: channel fetch OK, guild from channel=${!!channel?.guild}`);
-        if (channel?.guild) return channel.guild;
-    } catch (e) {
-        console.error('resolveGuild via channel failed:', e.message || e);
-    }
-    // Last resort: direct guild fetch
-    try {
-        const g = await client.guilds.fetch(interaction.guildId);
-        console.log('resolveGuild: guilds.fetch OK');
-        return g;
-    } catch (e) {
-        console.error('resolveGuild via guilds.fetch failed:', e.message || e);
-    }
-    return null;
 }
 
 async function handleAnalysis(interaction, client) {
