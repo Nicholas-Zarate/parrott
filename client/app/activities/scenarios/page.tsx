@@ -1,98 +1,102 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ChevronRight } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { TRIGGER_LABELS } from "@/lib/activity-helpers";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   ACTIVITY_SCENARIOS,
   SCENARIO_ORDER,
   ELI5_STEPS,
 } from "@/lib/activity-scenarios";
-import { Mic, Radio } from "lucide-react";
+import {
+  fetchAppDefaultSettings,
+  type ScenarioSetting,
+} from "@/lib/activity-trigger-settings";
+import { ScenarioSettingsCard } from "@/components/scenario-settings-card";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-function SourceBadge({ source }: { source: "presence" | "voice" }) {
-  if (source === "voice") {
-    return (
-      <Badge
-        variant="voice"
-        icon={<Mic aria-hidden />}
-        title="Triggered by voice state (Go Live)"
-      >
-        Voice
-      </Badge>
-    );
-  }
-  return (
-    <Badge
-      variant="presence"
-      icon={<Radio aria-hidden />}
-      title="Triggered by presence (game/stream/status)"
-    >
-      Presence
-    </Badge>
-  );
-}
+type SettingsState =
+  | { status: "loading" }
+  | { status: "success"; settings: ScenarioSetting[] }
+  | { status: "error"; error: string };
 
 export default function ActivityScenariosPage() {
+  const [state, setState] = useState<SettingsState>({ status: "loading" });
+
+  const load = useCallback(() => {
+    setState({ status: "loading" });
+    fetchAppDefaultSettings()
+      .then((settings) => setState({ status: "success", settings }))
+      .catch((err) =>
+        setState({
+          status: "error",
+          error: err instanceof Error ? err.message : "Failed to load settings",
+        })
+      );
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
   return (
     <div className="p-8 max-w-4xl">
       <h1 className="text-2xl font-semibold text-foreground">
         Activity scenarios
       </h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        All trigger scenarios that can fire an activity message. Each has a
-        cooldown and optional config; when conditions match, the bot may post to
-        the activity channel, DM the user, and/or TTS in voice.
+        Per-scenario delivery toggles and cooldown. When a scenario fires, the
+        bot uses these settings (or file defaults if not set) to decide channel,
+        DM, and voice TTS.
       </p>
 
-      {/* Trigger scenarios list */}
-      <h2 className="mt-8 text-lg font-semibold text-foreground">
-        Trigger scenarios
-      </h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        These are the scenarios currently defined in the bot. When one fires,
-        the message is generated and delivered according to global settings
-        (channel, DM, voice TTS).
-      </p>
-      <ul
-        className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-        role="list"
-      >
-        {SCENARIO_ORDER.map((key) => {
-          const scenario = ACTIVITY_SCENARIOS[key];
-          if (!scenario) return null;
-          const label = TRIGGER_LABELS[key] ?? key;
-          return (
-            <li key={key} className="min-w-0">
-              <Card className="overflow-hidden h-full">
-                <CardContent className="flex flex-col gap-2 py-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="trigger" triggerType={key}>
-                      {label}
-                    </Badge>
-                    <SourceBadge source={scenario.source} />
-                  </div>
-                  <p className="text-sm text-foreground">
-                    {scenario.description}
-                  </p>
-                  {scenario.configSummary ? (
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {scenario.configSummary}
-                    </p>
-                  ) : null}
-                </CardContent>
-              </Card>
-            </li>
-          );
-        })}
-      </ul>
+      {state.status === "loading" && (
+        <p className="mt-6 text-sm text-muted-foreground">Loading settings…</p>
+      )}
 
-      {/* ELI5 section (collapsible, default closed) */}
+      {state.status === "error" && (
+        <div className="mt-6 rounded-xl border border-destructive/50 bg-destructive/10 px-4 py-4">
+          <p className="text-sm font-medium text-destructive">{state.error}</p>
+          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={load}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {state.status === "success" && (
+        <>
+          <h2 className="mt-8 text-lg font-semibold text-foreground">
+            Trigger scenarios &amp; delivery
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Toggle delivery (channel, DM, voice) and scenario on/off. Cooldown is
+            per user per scenario (minutes).
+          </p>
+          <ul
+            className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            role="list"
+          >
+            {SCENARIO_ORDER.map((key) => {
+              const scenario = ACTIVITY_SCENARIOS[key];
+              const setting = state.settings.find((s) => s.triggerType === key);
+              if (!scenario || !setting) return null;
+              return (
+                <li key={key} className="min-w-0">
+                  <ScenarioSettingsCard
+                    setting={setting}
+                    scenarioConfig={scenario}
+                    onSaved={load}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+
       <Eli5Section />
     </div>
   );
