@@ -44,6 +44,7 @@ const DEFAULT_TOOL_DESCRIPTIONS = {
     create_timer: 'Set a timer or reminder. Use when the user says: remind me, remind me in X minutes, set a timer for X, make a timer for X, etc. Pass durationMinutes (1–1440) when the user gave a time; pass 0 when they did NOT say how long (tool will tell you to ask) or when isPopeyesTimer is true. If the user says it\'s a Popeyes timer (or says yes when you ask "This a Popeyes timer?"), pass isPopeyesTimer true and durationMinutes 0—the tool will use 10 min + random 2–15 min. Optional reminder text; replyInChannel true to post in channel when it fires, false to DM.',
     join_voice_and_squawk: 'Join the user\'s voice channel and speak via text-to-speech, then leave. Use for: (1) "holla at me" — pass empty customMessage; a short greeting (or occasionally a game-based line) is generated and spoken. (2) "say <phrase>" — pass the phrase in customMessage; that phrase is spoken. (3) When the user asks you to respond in voice chat / say it in VC / speak in voice — generate your response first, then pass it as customMessage so it is spoken. Do not reply in chat asking for clarification or a "cleaner" version; either use their wording or a funny/witty alternative you choose, then call this tool. They must be in a voice channel. If you previously offered an alternative phrase (e.g. a neutral version) and the user agrees (e.g. says "yes"), call this tool with that phrase in customMessage. Do NOT use for echo/repeat (use echo tool for that).',
     echo: 'Echo back a short message in chat only. Use ONLY when they say "echo" or "repeat" (e.g. "echo this", "repeat after me"). Do NOT use echo when they say "say"—for "say X" use join_voice_and_squawk with customMessage X so it is spoken in voice.',
+    get_personality: 'Return your current personality: Role and Voice Style only. Use when the user asks what your personality is, what your role or voice style is, how you\'re supposed to act or sound, to describe yourself (as a bot), to "spit back" or "read back" your personality, or to show your role and voice / system prompt (personality parts). Call this tool to fetch the current role and voice text; then summarize or read it back in character briefly—unless they asked for the raw or exact wording.',
 };
 
 function getToolDescription(toolSlug) {
@@ -410,6 +411,18 @@ function buildTools(context = {}) {
             }),
             execute: async ({ text }) => {
                 return { echoed: text };
+            },
+        }),
+
+        get_personality: tool({
+            description: getToolDescription('get_personality'),
+            parameters: z.object({}),
+            execute: async () => {
+                const sections = parrotConfig.getSystemPromptSections();
+                return {
+                    role: sections.role ?? '',
+                    voice: sections.voice ?? '',
+                };
             },
         }),
     };
