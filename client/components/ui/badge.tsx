@@ -9,6 +9,8 @@ const BASE_CLASSES =
 const VARIANT_CLASSES: Record<string, string> = {
   default:
     "border-border bg-muted/50 text-foreground",
+  outline:
+    "border-border bg-transparent text-foreground",
   user:
     "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-200",
   channel:
@@ -27,6 +29,7 @@ const VARIANT_CLASSES: Record<string, string> = {
 
 export type BadgeVariant =
   | "default"
+  | "outline"
   | "user"
   | "channel"
   | "dm"
