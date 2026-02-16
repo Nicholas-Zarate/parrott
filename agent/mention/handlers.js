@@ -50,8 +50,11 @@ async function onMention(message, client) {
     }
 
     const fullUserContent = await buildUserContentForParrot(message, client.user);
+    const member = message.member ?? (message.guild ? await message.guild.members.fetch(message.author.id).catch(() => null) : null);
+    const inVoiceContext = !!(member?.voice?.channel);
+    const systemPrompt = parrotConfig.getSystemPromptWithTools({ inVoiceContext });
     const messages = [
-        { role: 'system', content: parrotConfig.systemPromptWithTools },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: fullUserContent }
     ];
 
