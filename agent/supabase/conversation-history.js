@@ -1,19 +1,12 @@
 /**
- * Save parrot @mention conversation history to Supabase.
+ * Save and read parrot @mention conversation history from Supabase.
  * Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) in env.
  * Logs every insert so you can confirm when data is written.
  */
 
-const { createClient } = require('@supabase/supabase-js');
+const { getClient } = require('./client');
 
 const TABLE = 'parrot_conversation_history';
-
-function getClient() {
-    const url = process.env.SUPABASE_URL?.trim();
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-    if (!url || !key) return null;
-    return createClient(url, key);
-}
 
 /**
  * Extract unique tool names from AI SDK generateText result.steps.
@@ -80,7 +73,40 @@ async function saveConversation(row) {
     return { ok: true };
 }
 
+/**
+ * Fetch conversation history rows for a given time period.
+ * Used by the announcement job to build context for the LLM.
+ *
+ * @param {string|Date} periodStart - ISO timestamp or Date (inclusive)
+ * @param {string|Date} periodEnd   - ISO timestamp or Date (exclusive)
+ * @param {{ limit?: number }} [options] - max rows (default 100)
+ * @returns {Promise<{ data: Array|null; error: string|null; count: number }>}
+ */
+async function getConversationsForPeriod(periodStart, periodEnd, options = {}) {
+    const supabase = getClient();
+    if (!supabase) {
+        return { data: null, error: 'Supabase not configured.', count: 0 };
+    }
+    const limit = options.limit ?? 100;
+    const start = periodStart instanceof Date ? periodStart.toISOString() : periodStart;
+    const end = periodEnd instanceof Date ? periodEnd.toISOString() : periodEnd;
+
+    const { data, error, count } = await supabase
+        .from(TABLE)
+        .select('id, created_at, channel_id, guild_id, user_text, response_text, tools_called', { count: 'exact' })
+        .gte('created_at', start)
+        .lt('created_at', end)
+        .order('created_at', { ascending: true })
+        .limit(limit);
+
+    if (error) {
+        return { data: null, error: error.message, count: 0 };
+    }
+    return { data: data ?? [], error: null, count: count ?? (data?.length ?? 0) };
+}
+
 module.exports = {
     saveConversation,
     getToolsCalledFromSteps,
+    getConversationsForPeriod,
 };
