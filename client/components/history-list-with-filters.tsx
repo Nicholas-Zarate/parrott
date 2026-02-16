@@ -93,25 +93,27 @@ export function HistoryListWithFilters({ rows }: { rows: HistoryRowWithMeta[] })
     );
     supabase
       .rpc("search_conversation_history", params)
-      .then(({ data, error }) => {
-        if (runId !== searchRunIdRef.current) return;
-        setIsSearching(false);
-        if (error) {
+      .then(
+        ({ data, error }) => {
+          if (runId !== searchRunIdRef.current) return;
+          setIsSearching(false);
+          if (error) {
+            setSearchResults([]);
+            return;
+          }
+          const withMeta: HistoryRowWithMeta[] = (data ?? []).map((row: HistoryRow) => ({
+            ...row,
+            parsed: parseUserContext(row.user_text),
+            formattedDate: formatHistoryDate(row.created_at),
+          }));
+          setSearchResults(withMeta);
+        },
+        () => {
+          if (runId !== searchRunIdRef.current) return;
+          setIsSearching(false);
           setSearchResults([]);
-          return;
         }
-        const withMeta: HistoryRowWithMeta[] = (data ?? []).map((row: HistoryRow) => ({
-          ...row,
-          parsed: parseUserContext(row.user_text),
-          formattedDate: formatHistoryDate(row.created_at),
-        }));
-        setSearchResults(withMeta);
-      })
-      .catch(() => {
-        if (runId !== searchRunIdRef.current) return;
-        setIsSearching(false);
-        setSearchResults([]);
-      });
+      );
   }, [searchQuery, dateFrom, dateTo, channelId]);
 
   const sourceRows = searchResults !== null ? searchResults : rows;
