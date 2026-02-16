@@ -4,7 +4,7 @@
  */
 const assert = require('assert');
 const parrotConfig = require('../config/parrot');
-const { generateHollaResponse, FALLBACK_PHRASE } = require('../voice/holla');
+const { generateHollaResponse, FALLBACK_PHRASE } = require('../abilities/voice/holla');
 
 const tones = parrotConfig.getTones();
 
