@@ -1,6 +1,6 @@
 /**
- * Generate a short hood-parrot roast about the game people are playing in VC.
- * Used when the voice tool runs in "base" mode (no custom "say: ..." message).
+ * Generate a short, light comment about the game people are playing in VC.
+ * Used when the voice tool runs in "holla" mode (no custom "say: ..." message) and we occasionally mention the game.
  *
  * Env: OPENAI_API_KEY. On failure or no game, returns a safe fallback phrase.
  */
@@ -10,10 +10,10 @@ const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const LOG_PREFIX = '[Voice gameRoast]';
 
 /** Fallback when no game is found or OpenAI fails. */
-const FALLBACK_PHRASE = 'whatup ninjas, okay bye, SQUAAK';
+const FALLBACK_PHRASE = 'Hey everyone, okay bye!';
 
-const SYSTEM_PROMPT = 'You are a parrot who talks like he\'s from the hood. Reply with exactly one short sentence (under 15 words). No quotes, no explanation.';
-const USER_PROMPT_TEMPLATE = 'Everyone in the voice channel is playing "{{GAME}}". Roast that in one hood-parrot line.';
+const SYSTEM_PROMPT = 'You are a friendly parrot. Reply with exactly one short sentence (under 15 words). Light, playful comment—no roast or put-down. No quotes, no explanation.';
+const USER_PROMPT_TEMPLATE = 'Everyone in the voice channel is playing "{{GAME}}". Say one short, friendly line about it (no roast, no snark).';
 
 /**
  * Call OpenAI to generate one short roast line about the game. On any failure, return fallback.

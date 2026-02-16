@@ -6,9 +6,9 @@
 const MAX_MESSAGE_CONTENT_LENGTH = 800;
 
 /** Max messages to fetch above the current one (newest first). */
-const RECENT_MESSAGES_ABOVE_LIMIT = 5;
+const RECENT_MESSAGES_ABOVE_LIMIT = 8;
 /** Max total characters for the "recent messages above" block. */
-const RECENT_MESSAGES_ABOVE_MAX_CHARS = 1500;
+const RECENT_MESSAGES_ABOVE_MAX_CHARS = 2000;
 /** Max characters per message in that block. */
 const RECENT_MESSAGE_SNIPPET_LEN = 300;
 
@@ -46,7 +46,7 @@ function stripBotMention(content, botUser) {
  *
  * @param {import('discord.js').Message} message - The message that triggered the mention (we fetch above this)
  * @param {import('discord.js').User} [botUser] - Bot user (to label "[Bot]" vs "[UserName]")
- * @param {{ limit?: number, maxChars?: number }} [options] - limit (default 5), maxChars for the whole block (default 1500)
+ * @param {{ limit?: number, maxChars?: number }} [options] - limit (default RECENT_MESSAGES_ABOVE_LIMIT), maxChars for the whole block (default RECENT_MESSAGES_ABOVE_MAX_CHARS)
  * @returns {Promise<string>} Formatted block or empty string on error/no channel
  */
 async function getRecentMessagesAboveForParrot(message, botUser = null, options = {}) {
@@ -86,6 +86,40 @@ async function getRecentMessagesAboveForParrot(message, botUser = null, options 
     } catch (err) {
         console.error('[Mention] getRecentMessagesAbove error:', err?.message || err);
         return '';
+    }
+}
+
+/**
+ * Get the previous conversation turn (last user message + last bot reply) when the message
+ * immediately above the current one is from the bot. Used to send proper user/assistant turns
+ * so the model can resolve follow-ups like "yes" to the correct prior question.
+ *
+ * @param {import('discord.js').Message} message - The message that triggered the mention (we fetch above this)
+ * @param {import('discord.js').User} [botUser] - Bot user (to identify bot message and format user message)
+ * @returns {Promise<{ userContent: string, assistantContent: string } | null>}
+ */
+async function getPreviousTurnForParrot(message, botUser = null) {
+    if (!message?.channel?.messages?.fetch || !botUser?.id) return null;
+    try {
+        const fetched = await message.channel.messages.fetch({ limit: 2, before: message.id });
+        if (!fetched || fetched.size < 2) return null;
+        const sorted = [...fetched.values()].sort((a, b) => (a.id > b.id ? -1 : a.id < b.id ? 1 : 0)); // newest first
+        const first = sorted[0];  // message right above current
+        const second = sorted[1]; // message before that
+        const isFirstBot = first.author?.id === botUser.id;
+        const isSecondUser = second.author && !second.author.bot;
+        if (!isFirstBot || !isSecondUser) return null;
+
+        const userContent = formatMessageForParrot(second, botUser);
+        let assistantContent = (first.content || '').trim();
+        if (assistantContent.length > MAX_MESSAGE_CONTENT_LENGTH) {
+            assistantContent = assistantContent.slice(0, MAX_MESSAGE_CONTENT_LENGTH) + '…';
+        }
+        if (!assistantContent) assistantContent = '(no text)';
+        return { userContent, assistantContent };
+    } catch (err) {
+        console.error('[Mention] getPreviousTurnForParrot error:', err?.message || err);
+        return null;
     }
 }
 
@@ -166,6 +200,7 @@ async function buildUserContentForParrot(message, botUser = null) {
 
 module.exports = {
     formatMessageForParrot,
+    getPreviousTurnForParrot,
     getRecentMessagesAboveForParrot,
     getOnlineNowForParrot,
     buildUserContentForParrot,
