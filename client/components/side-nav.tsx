@@ -13,6 +13,8 @@ import {
   Activity,
   ChevronDown,
   ChevronRight,
+  Settings,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -22,6 +24,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { AuthUser } from "@/components/auth-user";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 const activitiesChildren = [
   { href: "/activities", label: "Feed" },
@@ -41,6 +45,10 @@ function isActivitiesGroup(item: NavItem): item is NavItem & { children: typeof 
   return "children" in item && Array.isArray(item.children);
 }
 
+const settingsChildren = [
+  { href: "/settings/team", label: "Team", icon: Users },
+] as const;
+
 /**
  * Shared nav link list used by both desktop sidebar and mobile drawer.
  */
@@ -52,12 +60,19 @@ function NavLinks({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const perms = usePermissions();
   const activitiesOpen = pathname.startsWith("/activities");
+  const settingsOpen = pathname.startsWith("/settings");
   const [activitiesExpanded, setActivitiesExpanded] = useState(activitiesOpen);
+  const [settingsExpanded, setSettingsExpanded] = useState(settingsOpen);
 
   useEffect(() => {
     if (activitiesOpen) setActivitiesExpanded(true);
   }, [activitiesOpen]);
+
+  useEffect(() => {
+    if (settingsOpen) setSettingsExpanded(true);
+  }, [settingsOpen]);
 
   return (
     <ul className="flex flex-col gap-1">
@@ -159,6 +174,81 @@ function NavLinks({
           </li>
         );
       })}
+
+      {/* Admin-only: Settings section */}
+      {perms.isAdmin && (
+        <>
+          {!collapsed && (
+            <div className="my-2 mx-2 border-t border-sidebar-border" />
+          )}
+          {collapsed ? (
+            <li>
+              <Link
+                href="/settings/team"
+                onClick={onNavigate}
+                title="Team"
+                className={cn(
+                  "flex items-center rounded-md text-sm font-medium transition-colors",
+                  "justify-center px-2 py-2",
+                  settingsOpen
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+              >
+                <Settings className="size-4 shrink-0" aria-hidden />
+              </Link>
+            </li>
+          ) : (
+            <li className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => setSettingsExpanded((e) => !e)}
+                className={cn(
+                  "flex items-center rounded-md text-sm font-medium transition-colors w-full",
+                  "gap-3 px-3 py-2",
+                  settingsOpen
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+                aria-expanded={settingsExpanded}
+              >
+                <Settings className="size-4 shrink-0" aria-hidden />
+                <span className="flex-1 text-left">Settings</span>
+                {settingsExpanded ? (
+                  <ChevronDown className="size-4 shrink-0" aria-hidden />
+                ) : (
+                  <ChevronRight className="size-4 shrink-0" aria-hidden />
+                )}
+              </button>
+              {settingsExpanded ? (
+                <ul className="flex flex-col gap-0.5 pl-4 border-l border-sidebar-border ml-2">
+                  {settingsChildren.map((sub) => {
+                    const isSubActive = pathname.startsWith(sub.href);
+                    const SubIcon = sub.icon;
+                    return (
+                      <li key={sub.href}>
+                        <Link
+                          href={sub.href}
+                          onClick={onNavigate}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-md text-sm font-medium transition-colors py-1.5 pr-2 pl-2 -ml-px border-l-2",
+                            isSubActive
+                              ? "border-sidebar-accent-foreground bg-sidebar-accent/50 text-sidebar-accent-foreground"
+                              : "border-transparent text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                          )}
+                        >
+                          <SubIcon className="size-3.5 shrink-0" aria-hidden />
+                          {sub.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </li>
+          )}
+        </>
+      )}
     </ul>
   );
 }
@@ -173,15 +263,16 @@ export function DesktopSideNav() {
   return (
     <nav
       className={cn(
-        "hidden md:flex flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-in-out",
+        "hidden md:flex md:h-full md:min-h-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-in-out",
         collapsed ? "w-14" : "w-56"
       )}
       aria-label="Main navigation"
     >
-      <div className="flex-1 p-2">
+      <div className="flex-1 min-h-0 overflow-y-auto p-2">
         <NavLinks collapsed={collapsed} />
       </div>
-      <div className="border-t border-sidebar-border p-2">
+      <div className="shrink-0 border-t border-sidebar-border p-2 flex flex-col gap-1">
+        <AuthUser collapsed={collapsed} />
         <Button
           variant="ghost"
           size="icon"
@@ -215,7 +306,7 @@ export function MobileNav() {
   const close = useCallback(() => setOpen(false), []);
 
   return (
-    <div className="flex md:hidden items-center border-b border-sidebar-border bg-sidebar px-3 py-2">
+    <div className="shrink-0 flex md:hidden items-center border-b border-sidebar-border bg-sidebar px-3 py-2">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <Button
@@ -229,18 +320,21 @@ export function MobileNav() {
         </SheetTrigger>
         <SheetContent
           side="left"
-          className="w-56 bg-sidebar p-0"
+          className="flex w-56 flex-col bg-sidebar p-0"
           showCloseButton={false}
         >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <div className="flex h-full flex-col">
-            <div className="flex items-center border-b border-sidebar-border px-4 py-3">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="shrink-0 flex items-center border-b border-sidebar-border px-4 py-3">
               <span className="text-sm font-semibold text-sidebar-foreground">
                 Parrott
               </span>
             </div>
-            <div className="flex-1 p-2">
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
               <NavLinks onNavigate={close} />
+            </div>
+            <div className="shrink-0 border-t border-sidebar-border p-2">
+              <AuthUser />
             </div>
           </div>
         </SheetContent>

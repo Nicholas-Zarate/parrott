@@ -9,7 +9,8 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   let next = searchParams.get("next") ?? "/";
-  if (!next.startsWith("/")) {
+  // Block open redirect: must start with "/" but not "//" (protocol-relative URL)
+  if (!next.startsWith("/") || next.startsWith("//")) {
     next = "/";
   }
 
@@ -17,15 +18,7 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      const forwardedHost = request.headers.get("x-forwarded-host");
-      const isLocal = process.env.NODE_ENV === "development";
-      if (isLocal) {
-        return NextResponse.redirect(`${origin}${next}`);
-      } else if (forwardedHost) {
-        return NextResponse.redirect(`https://${forwardedHost}${next}`);
-      } else {
-        return NextResponse.redirect(`${origin}${next}`);
-      }
+      return NextResponse.redirect(`${origin}${next}`);
     }
   }
 

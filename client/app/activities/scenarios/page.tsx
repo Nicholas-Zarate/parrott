@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +14,7 @@ import {
   type ScenarioSetting,
 } from "@/lib/activity-trigger-settings";
 import { ScenarioSettingsCard } from "@/components/scenario-settings-card";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ type SettingsState =
   | { status: "error"; error: string };
 
 export default function ActivityScenariosPage() {
+  const perms = usePermissions();
   const [state, setState] = useState<SettingsState>({ status: "loading" });
 
   const load = useCallback(() => {
@@ -75,6 +77,18 @@ export default function ActivityScenariosPage() {
             Toggle delivery (channel, DM, voice) and scenario on/off. Cooldown is
             per user per scenario (minutes).
           </p>
+
+          {!perms.loading && !perms.canEdit && (
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
+              <Lock className="size-3.5 text-muted-foreground" aria-hidden />
+              <p className="text-xs text-muted-foreground">
+                {perms.authenticated
+                  ? "You have read-only access. Ask an admin for editor permissions to make changes."
+                  : "Log in with Discord to edit settings."}
+              </p>
+            </div>
+          )}
+
           <ul
             className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
             role="list"
@@ -89,6 +103,7 @@ export default function ActivityScenariosPage() {
                     setting={setting}
                     scenarioConfig={scenario}
                     onSaved={load}
+                    readOnly={!perms.canEdit}
                   />
                 </li>
               );
