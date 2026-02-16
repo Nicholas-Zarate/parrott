@@ -1,0 +1,13 @@
+import { defineConfig } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./test",
+  testMatch: "**/*.test.ts",
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  reporter: "list",
+  use: {
+    baseURL: "http://localhost:3000",
+  },
+});

@@ -1,41 +1,41 @@
-import { describe, it, expect } from "vitest";
+import { test, expect } from "@playwright/test";
 import { getLevelColor, parseMessageSegments } from "@/lib/logs-helpers";
 
-describe("getLevelColor", () => {
-  it("returns red for error", () => {
+test.describe("getLevelColor", () => {
+  test("returns red for error", () => {
     expect(getLevelColor("error")).toBe("text-red-400");
   });
 
-  it("returns amber for warn", () => {
+  test("returns amber for warn", () => {
     expect(getLevelColor("warn")).toBe("text-amber-400");
   });
 
-  it("returns white for info", () => {
+  test("returns white for info", () => {
     expect(getLevelColor("info")).toBe("text-white");
   });
 
-  it("returns zinc for debug", () => {
+  test("returns zinc for debug", () => {
     expect(getLevelColor("debug")).toBe("text-zinc-500");
   });
 
-  it("is case-insensitive", () => {
+  test("is case-insensitive", () => {
     expect(getLevelColor("ERROR")).toBe("text-red-400");
     expect(getLevelColor("Warn")).toBe("text-amber-400");
   });
 
-  it("returns fallback for unknown level", () => {
+  test("returns fallback for unknown level", () => {
     expect(getLevelColor("trace")).toBe("text-zinc-400");
     expect(getLevelColor("")).toBe("text-zinc-400");
   });
 });
 
-describe("parseMessageSegments", () => {
-  it("returns single text segment when no brackets", () => {
+test.describe("parseMessageSegments", () => {
+  test("returns single text segment when no brackets", () => {
     const out = parseMessageSegments("hello world");
     expect(out).toEqual([{ type: "text", value: "hello world" }]);
   });
 
-  it("splits one [label] and surrounding text", () => {
+  test("splits one [label] and surrounding text", () => {
     const out = parseMessageSegments("[ActivityDB] Logging event");
     expect(out).toEqual([
       { type: "label", value: "ActivityDB" },
@@ -43,7 +43,7 @@ describe("parseMessageSegments", () => {
     ]);
   });
 
-  it("splits multiple [labels] in one message", () => {
+  test("splits multiple [labels] in one message", () => {
     const out = parseMessageSegments("[Mention] #general @user: hi");
     expect(out).toEqual([
       { type: "label", value: "Mention" },
@@ -51,7 +51,7 @@ describe("parseMessageSegments", () => {
     ]);
   });
 
-  it("handles label at end of message", () => {
+  test("handles label at end of message", () => {
     const out = parseMessageSegments("prefix [Debug]");
     expect(out).toEqual([
       { type: "text", value: "prefix " },
@@ -59,12 +59,12 @@ describe("parseMessageSegments", () => {
     ]);
   });
 
-  it("handles empty string", () => {
+  test("handles empty string", () => {
     const out = parseMessageSegments("");
     expect(out).toEqual([]);
   });
 
-  it("handles only a label", () => {
+  test("handles only a label", () => {
     const out = parseMessageSegments("[Gateway RAW]");
     expect(out).toEqual([{ type: "label", value: "Gateway RAW" }]);
   });
