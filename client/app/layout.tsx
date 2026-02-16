@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Parrott",
   description: "Parrott client",
+  icons: {
+    icon: "/assets/toucan_white.png",
+  },
 };
 
 export default function RootLayout({
