@@ -21,12 +21,12 @@ const LOG_PREFIX = '[Voice]';
 
 /**
  * Play a sound in the given voice channel and leave when done.
- * - type: 'tts', text: string → use TTS (ElevenLabs); no file required.
+ * - type: 'tts', text: string, voiceSettings?: object → use TTS (ElevenLabs). voiceSettings overrides env defaults (stability, similarity_boost, style, use_speaker_boost, speed).
  * - type: 'file', path: string → play local file (optional fallback).
  *
  * @param {import('discord.js').Client} client - Bot client (for adapter)
  * @param {import('discord.js').VoiceChannel} voiceChannel - Channel to join
- * @param {{ type: 'file', path: string } | { type: 'tts', text: string }} options - What to play
+ * @param {{ type: 'file', path: string } | { type: 'tts', text: string, voiceSettings?: object }} options - What to play
  * @returns {Promise<{ success: boolean, error?: string }>}
  */
 async function playInVoiceChannel(client, voiceChannel, options) {
@@ -46,7 +46,8 @@ async function playInVoiceChannel(client, voiceChannel, options) {
     let absolutePath;
 
     if (options.type === 'tts') {
-        const ttsResult = await generateAudio(options.text || '');
+        const voiceSettings = options.voiceSettings || {};
+        const ttsResult = await generateAudio(options.text || '', voiceSettings);
         if (!ttsResult.success) {
             console.log(`${LOG_PREFIX} TTS failed: ${ttsResult.error}`);
             return { success: false, error: ttsResult.error };
@@ -88,15 +89,17 @@ async function playInVoiceChannel(client, voiceChannel, options) {
     console.log(`${LOG_PREFIX} joined ${channelLabel}, starting playback`);
 
     const player = createAudioPlayer();
+    connection.subscribe(player);
 
     try {
-        const resource = createAudioResource(absolutePath, { inlineVolume: false });
+        const stream = fs.createReadStream(absolutePath);
+        const resource = createAudioResource(stream, { inlineVolume: true });
+        resource.volume.setVolume(1.3); // ~30% louder in VC
         player.play(resource);
-        connection.subscribe(player);
     } catch (err) {
         console.error(`${LOG_PREFIX} createAudioResource/play error:`, err?.message || err);
         connection.destroy();
-        deleteTtsTempFileIfNeeded();
+        setTimeout(() => deleteTtsTempFileIfNeeded(), 2000);
         return { success: false, error: err?.message || 'Failed to play audio. Is FFmpeg installed?' };
     }
 
@@ -122,7 +125,8 @@ async function playInVoiceChannel(client, voiceChannel, options) {
                 const conn = getVoiceConnection(guild.id);
                 if (conn) conn.destroy();
             } catch (_) { /* ignore */ }
-            deleteTtsTempFileIfNeeded();
+            // Delay delete so any in-flight ReadStream has time to open/close the file (avoids ENOENT on Windows)
+            setTimeout(() => deleteTtsTempFileIfNeeded(), 2000);
         }
 
         player.on(AudioPlayerStatus.Idle, () => {
@@ -137,7 +141,7 @@ async function playInVoiceChannel(client, voiceChannel, options) {
 }
 
 /** Fixed phrase for squawk tool until we allow custom lines (e.g. from LLM). */
-const SQUAWK_PHRASE = 'whatup ninjas, okay bye, SQUAAK';
+const SQUAWK_PHRASE = 'Hey everyone, okay bye!';
 
 /**
  * Join the user's voice channel and speak the squawk phrase via ElevenLabs TTS, then leave.

@@ -1,5 +1,5 @@
 const { isChannelAllowed, getChannelTier } = require('./config');
-const { buildUserContentForParrot, isBotMentionedInContent } = require('./format');
+const { buildUserContentForParrot, getPreviousTurnForParrot, isBotMentionedInContent } = require('./format');
 const { checkAndRecord, getRetryAfterSeconds, plural } = require('./rateLimit');
 const parrotConfig = require('../config/parrot');
 const { getOpenAIErrorMessage } = require('../commands/roast/openai');
@@ -50,12 +50,19 @@ async function onMention(message, client) {
     }
 
     const fullUserContent = await buildUserContentForParrot(message, client.user);
-    const member = message.member ?? (message.guild ? await message.guild.members.fetch(message.author.id).catch(() => null) : null);
-    const inVoiceContext = !!(member?.voice?.channel);
-    const systemPrompt = parrotConfig.getSystemPromptWithTools({ inVoiceContext });
+    const previousTurn = await getPreviousTurnForParrot(message, client.user);
+    // VC tone (2/3 words) disabled; always use text tone. Re-enable by passing inVoiceContext from member.voice.channel (see PLAN_VC_TOOL_HOLLA_SAY.md).
+    const systemPrompt = parrotConfig.getSystemPromptWithTools({});
     const messages = [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: fullUserContent }
+        ...(previousTurn
+            ? [
+                { role: 'user', content: previousTurn.userContent },
+                { role: 'assistant', content: previousTurn.assistantContent },
+                { role: 'user', content: fullUserContent },
+            ]
+            : [{ role: 'user', content: fullUserContent }]
+        ),
     ];
 
     // Reply immediately so the user sees something while tools/LLM run (AI SDK has no "before tool" callback).

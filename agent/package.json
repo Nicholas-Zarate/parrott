@@ -5,10 +5,11 @@
   "main": "discord-voting-bot.js",
   "scripts": {
     "start": "node discord-voting-bot.js",
-    "test": "node test/vc-tone.test.js"
+    "test": "node test/vc-tone.test.js && node test/voice-settings-from-text.test.js"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.0.0",
+    "@discordjs/opus": "^0.10.0",
     "@discordjs/voice": "^0.19.0",
     "@snazzah/davey": "^0.1.9",
     "@supabase/supabase-js": "^2.95.3",
@@ -16,6 +17,7 @@
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
     "ffmpeg-static": "^5.2.0",
+    "opusscript": "^0.0.8",
     "zod": "^3.23.0"
   }
 }
