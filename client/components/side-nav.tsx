@@ -306,7 +306,7 @@ export function MobileNav() {
   const close = useCallback(() => setOpen(false), []);
 
   return (
-    <div className="shrink-0 flex md:hidden items-center border-b border-sidebar-border bg-sidebar px-3 py-2">
+    <div className="sticky top-0 z-40 shrink-0 flex md:hidden items-center border-b border-sidebar-border bg-sidebar px-3 py-2">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <Button

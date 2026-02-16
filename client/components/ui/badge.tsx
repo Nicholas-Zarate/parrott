@@ -25,6 +25,8 @@ const VARIANT_CLASSES: Record<string, string> = {
     "border-border bg-muted/50 text-muted-foreground",
   activity:
     "border-border bg-muted/50 text-foreground",
+  fresh:
+    "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
 };
 
 export type BadgeVariant =
@@ -37,6 +39,7 @@ export type BadgeVariant =
   | "roast"
   | "presence"
   | "activity"
+  | "fresh"
   | "trigger";
 
 type BadgeProps = {
