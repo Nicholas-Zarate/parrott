@@ -5,10 +5,10 @@
 
 const MAX_MESSAGE_CONTENT_LENGTH = 800;
 
-/** Max messages to fetch above the current one (newest first). */
-const RECENT_MESSAGES_ABOVE_LIMIT = 8;
+/** Max messages to fetch above the current one (newest first). Used for thread context and callbacks/jokes across messages. */
+const RECENT_MESSAGES_ABOVE_LIMIT = 10;
 /** Max total characters for the "recent messages above" block. */
-const RECENT_MESSAGES_ABOVE_MAX_CHARS = 2000;
+const RECENT_MESSAGES_ABOVE_MAX_CHARS = 2500;
 /** Max characters per message in that block. */
 const RECENT_MESSAGE_SNIPPET_LEN = 300;
 
@@ -57,7 +57,7 @@ async function getRecentMessagesAboveForParrot(message, botUser = null, options 
     }
     try {
         const fetched = await message.channel.messages.fetch({
-            limit: Math.min(limit, 10),
+            limit: Math.min(limit, 15),
             before: message.id
         });
         if (!fetched || fetched.size === 0) return '';

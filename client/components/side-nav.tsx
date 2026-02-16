@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Settings,
   Users,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ const activitiesChildren = [
 const navItems = [
   { href: "/", label: "Home", icon: Home },
   { href: "/history", label: "History", icon: History },
+  { href: "/personality", label: "Personality", icon: Sparkles },
   { href: "/activities", label: "Activities", icon: Activity, children: activitiesChildren },
   { href: "/logs", label: "Logs", icon: Terminal },
 ] as const;

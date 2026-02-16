@@ -37,12 +37,27 @@ const SEARCH_SNIPPET_MAX_LEN = 400;
  * @param {Object} context - { message, client } (Discord context for resolving guild, replying, etc.)
  * @returns {Object} tools map for generateText
  */
+const DEFAULT_TOOL_DESCRIPTIONS = {
+    run_roast: 'Generate a short roast for a Discord user based on their recent messages. Use when the user asks to roast someone or to "roast @user". Requires the target Discord user ID. Uses last 7 days and server scope by default.',
+    search_web: 'Search the web for current information, facts, or research. Use when the user asks to look something up, research a topic, get recent news, find facts, says "find out" (e.g. find out about X), or "search online". Returns titles, URLs, and short snippets.',
+    create_hearing_poll: 'Create a hearing poll (like /vote_hearing): anyone can add options then vote. Use when the user says: create a hearing poll, vote_hearing, vote hearing, run a hearing, do a hearing, or "poll where people can add options". Pass question (required), duration in minutes (use 0 for no limit), and anonymous (false for public votes).',
+    create_timer: 'Set a timer or reminder. Use when the user says: remind me, remind me in X minutes, set a timer for X, make a timer for X, etc. Pass durationMinutes (1–1440) when the user gave a time; pass 0 when they did NOT say how long (tool will tell you to ask) or when isPopeyesTimer is true. If the user says it\'s a Popeyes timer (or says yes when you ask "This a Popeyes timer?"), pass isPopeyesTimer true and durationMinutes 0—the tool will use 10 min + random 2–15 min. Optional reminder text; replyInChannel true to post in channel when it fires, false to DM.',
+    join_voice_and_squawk: 'Join the user\'s voice channel and speak via text-to-speech, then leave. Use for: (1) "holla at me" — pass empty customMessage; a short greeting (or occasionally a game-based line) is generated and spoken. (2) "say <phrase>" — pass the phrase in customMessage; that phrase is spoken. (3) When the user asks you to respond in voice chat / say it in VC / speak in voice — generate your response first, then pass it as customMessage so it is spoken. Do not reply in chat asking for clarification or a "cleaner" version; either use their wording or a funny/witty alternative you choose, then call this tool. They must be in a voice channel. If you previously offered an alternative phrase (e.g. a neutral version) and the user agrees (e.g. says "yes"), call this tool with that phrase in customMessage. Do NOT use for echo/repeat (use echo tool for that).',
+    echo: 'Echo back a short message in chat only. Use ONLY when they say "echo" or "repeat" (e.g. "echo this", "repeat after me"). Do NOT use echo when they say "say"—for "say X" use join_voice_and_squawk with customMessage X so it is spoken in voice.',
+};
+
+function getToolDescription(toolSlug) {
+    const fromDb = parrotConfig.getToolDescriptions()[toolSlug];
+    if (fromDb != null && String(fromDb).trim()) return String(fromDb).trim();
+    return DEFAULT_TOOL_DESCRIPTIONS[toolSlug] || '';
+}
+
 function buildTools(context = {}) {
     const { message, client } = context;
 
     return {
         run_roast: tool({
-            description: 'Generate a short roast for a Discord user based on their recent messages. Use when the user asks to roast someone or to "roast @user". Requires the target Discord user ID. Uses last 7 days and server scope by default.',
+            description: getToolDescription('run_roast'),
             parameters: z.object({
                 targetUserId: z.string().describe('Discord user ID of the person to roast'),
             }),
@@ -111,7 +126,7 @@ function buildTools(context = {}) {
         }),
 
         search_web: tool({
-            description: 'Search the web for current information, facts, or research. Use when the user asks to look something up, research a topic, get recent news, find facts, says "find out" (e.g. find out about X), or "search online". Returns titles, URLs, and short snippets.',
+            description: getToolDescription('search_web'),
             parameters: z.object({
                 query: z.string().min(1).describe('The search query (e.g. "current weather NYC", "who won the 2024 election")'),
             }),
@@ -185,7 +200,7 @@ function buildTools(context = {}) {
         }),
 
         create_hearing_poll: tool({
-            description: 'Create a hearing poll (like /vote_hearing): anyone can add options then vote. Use when the user says: create a hearing poll, vote_hearing, vote hearing, run a hearing, do a hearing, or "poll where people can add options". Pass question (required), duration in minutes (use 0 for no limit), and anonymous (false for public votes).',
+            description: getToolDescription('create_hearing_poll'),
             parameters: z.object({
                 question: z.string().min(1).describe('The poll question or topic'),
                 duration: z.number().min(0).describe('Duration in minutes; use 0 for no time limit'),
@@ -240,7 +255,7 @@ function buildTools(context = {}) {
         }),
 
         create_timer: tool({
-            description: 'Set a timer or reminder. Use when the user says: remind me, remind me in X minutes, set a timer for X, make a timer for X, etc. Pass durationMinutes (1–1440) when the user gave a time; pass 0 when they did NOT say how long (tool will tell you to ask) or when isPopeyesTimer is true. If the user says it\'s a Popeyes timer (or says yes when you ask "This a Popeyes timer?"), pass isPopeyesTimer true and durationMinutes 0—the tool will use 10 min + random 2–15 min. Optional reminder text; replyInChannel true to post in channel when it fires, false to DM.',
+            description: getToolDescription('create_timer'),
             parameters: z.object({
                 durationMinutes: z.number().min(0).max(1440).describe('Duration in minutes (1 to 1440). Pass 0 if user did not say how long (you will ask) or if isPopeyesTimer is true.'),
                 isPopeyesTimer: z.boolean().describe('True when the user says it\'s a Popeyes timer (or says yes when you ask). Uses 10m + random 2–15m.'),
@@ -324,9 +339,9 @@ function buildTools(context = {}) {
         }),
 
         join_voice_and_squawk: tool({
-            description: 'Join the user\'s voice channel and speak via text-to-speech, then leave. Use for: (1) "holla at me" — pass empty customMessage; a short greeting (or occasionally a game-based line) is generated and spoken. (2) "say <phrase>" — pass the phrase in customMessage; that phrase is spoken. (3) When the user asks you to respond in voice chat / say it in VC / speak in voice — generate your response first, then pass it as customMessage so it is spoken. They must be in a voice channel. If you previously offered an alternative phrase (e.g. a neutral version) and the user agrees (e.g. says "yes"), call this tool with that phrase in customMessage. Do NOT use for echo/repeat (use echo tool for that).',
+            description: getToolDescription('join_voice_and_squawk'),
             parameters: z.object({
-                customMessage: z.string().describe('For "say <phrase>": the phrase to speak (e.g. "say we won" → "we won"). For "holla at me": pass empty string so a greeting or game line is generated.'),
+                customMessage: z.string().describe('For "say <phrase>": the phrase to speak (e.g. "say we won" → "we won"). For "holla at me": pass empty string so a greeting or game line is generated. For voice-delivery requests: the full line to speak (your composed response or a witty alternative—do not ask the user for clarification).'),
             }),
             execute: async ({ customMessage }) => {
                 const channelName = message?.channel?.name ?? 'dm';
@@ -389,7 +404,7 @@ function buildTools(context = {}) {
         }),
 
         echo: tool({
-            description: 'Echo back a short message in chat only. Use ONLY when they say "echo" or "repeat" (e.g. "echo this", "repeat after me"). Do NOT use echo when they say "say"—for "say X" use join_voice_and_squawk with customMessage X so it is spoken in voice.',
+            description: getToolDescription('echo'),
             parameters: z.object({
                 text: z.string().describe('The short text to echo back'),
             }),

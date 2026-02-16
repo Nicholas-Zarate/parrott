@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { parseUserContext, formatHistoryDate } from "@/lib/history-parse";
+import { buildSearchParams, getHighlightTerms, HISTORY_SEARCH_RESULT_LIMIT } from "@/lib/history-search";
 import { HistoryFilterHeader } from "@/components/history-filter-header";
 import { HistoryCard, type HistoryRow, type ParsedNames } from "@/components/history-card";
 import { HistoryField, UserTextIcon, ResponseTextIcon } from "@/components/history-field";
@@ -44,6 +47,9 @@ function filterRows(
 }
 
 export function HistoryListWithFilters({ rows }: { rows: HistoryRowWithMeta[] }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<HistoryRowWithMeta[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [channelId, setChannelId] = useState("");
@@ -69,9 +75,49 @@ export function HistoryListWithFilters({ rows }: { rows: HistoryRowWithMeta[] })
     };
   }, [rows]);
 
+  const searchRunIdRef = useRef(0);
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    const runId = ++searchRunIdRef.current;
+    setIsSearching(true);
+    const supabase = createClient();
+    const params = buildSearchParams(
+      { dateFrom, dateTo, channelId },
+      searchQuery,
+      HISTORY_SEARCH_RESULT_LIMIT,
+      0
+    );
+    supabase
+      .rpc("search_conversation_history", params)
+      .then(({ data, error }) => {
+        if (runId !== searchRunIdRef.current) return;
+        setIsSearching(false);
+        if (error) {
+          setSearchResults([]);
+          return;
+        }
+        const withMeta: HistoryRowWithMeta[] = (data ?? []).map((row: HistoryRow) => ({
+          ...row,
+          parsed: parseUserContext(row.user_text),
+          formattedDate: formatHistoryDate(row.created_at),
+        }));
+        setSearchResults(withMeta);
+      })
+      .catch(() => {
+        if (runId !== searchRunIdRef.current) return;
+        setIsSearching(false);
+        setSearchResults([]);
+      });
+  }, [searchQuery, dateFrom, dateTo, channelId]);
+
+  const sourceRows = searchResults !== null ? searchResults : rows;
   const filteredRows = useMemo(
     () =>
-      filterRows(rows, {
+      filterRows(sourceRows, {
         dateFrom,
         dateTo,
         channelId,
@@ -79,25 +125,39 @@ export function HistoryListWithFilters({ rows }: { rows: HistoryRowWithMeta[] })
         voiceOnly,
         roastOnly,
       }),
-    [rows, dateFrom, dateTo, channelId, userName, voiceOnly, roastOnly]
+    [sourceRows, dateFrom, dateTo, channelId, userName, voiceOnly, roastOnly]
   );
 
   const hasActiveFilters = Boolean(
-    dateFrom || dateTo || channelId || userName || voiceOnly || roastOnly
+    searchQuery.trim() ||
+    dateFrom ||
+    dateTo ||
+    channelId ||
+    userName ||
+    voiceOnly ||
+    roastOnly
   );
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
+    setSearchQuery("");
+    setSearchResults(null);
     setDateFrom("");
     setDateTo("");
     setChannelId("");
     setUserName("");
     setVoiceOnly(false);
     setRoastOnly(false);
-  };
+  }, []);
+
+  const highlightTerms = useMemo(() => getHighlightTerms(searchQuery), [searchQuery]);
+  const totalCount = searchResults !== null ? searchResults.length : rows.length;
 
   return (
     <div className="space-y-4">
       <HistoryFilterHeader
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        isSearching={isSearching}
         dateFrom={dateFrom}
         dateTo={dateTo}
         onDateFromChange={setDateFrom}
@@ -117,8 +177,9 @@ export function HistoryListWithFilters({ rows }: { rows: HistoryRowWithMeta[] })
       />
 
       <p className="text-xs text-muted-foreground">
-        Showing {filteredRows.length} of {rows.length} entries
-        {hasActiveFilters ? " (filtered)" : ""}.
+        Showing {filteredRows.length} of {totalCount} entries
+        {hasActiveFilters ? " (filtered)" : ""}
+        {searchQuery.trim() ? " (server search)" : ""}.
       </p>
 
       <ul className="flex flex-col gap-2">
@@ -134,12 +195,14 @@ export function HistoryListWithFilters({ rows }: { rows: HistoryRowWithMeta[] })
                 value={row.user_text}
                 multiline
                 icon={<UserTextIcon />}
+                highlightTerms={highlightTerms}
               />
               <HistoryField
                 label="response_text"
                 value={row.response_text}
                 multiline
                 icon={<ResponseTextIcon />}
+                highlightTerms={highlightTerms}
               />
               {Array.isArray(row.tools_called) && row.tools_called.length > 0 ? (
                 <HistoryField
