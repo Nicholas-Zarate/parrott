@@ -1,17 +1,27 @@
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { getHighlightSegments } from "@/lib/history-search";
 
 export function HistoryField({
   label,
   value,
   multiline = false,
   icon,
+  highlightTerms = [],
 }: {
   label: string;
   value: string | null;
   multiline?: boolean;
   icon?: React.ReactNode;
+  /** When set, matching substrings are wrapped in <mark> for search highlight */
+  highlightTerms?: string[];
 }) {
-  const display = value?.trim() || "—";
+  const raw = value?.trim() || "";
+  const display = raw || "—";
+  const segments =
+    highlightTerms.length > 0 && raw
+      ? getHighlightSegments(raw, highlightTerms)
+      : null;
+
   return (
     <section className="flex flex-col gap-1.5">
       <span
@@ -28,7 +38,21 @@ export function HistoryField({
             : "rounded-md border bg-muted/20 px-3 py-2 font-mono text-sm text-foreground"
         }
       >
-        {display}
+        {segments ? (
+          <>
+            {segments.map((seg, i) =>
+              seg.type === "mark" ? (
+                <mark key={i} className="rounded bg-primary/30 font-medium">
+                  {seg.value}
+                </mark>
+              ) : (
+                <span key={i}>{seg.value}</span>
+              )
+            )}
+          </>
+        ) : (
+          display
+        )}
       </div>
     </section>
   );

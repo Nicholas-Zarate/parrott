@@ -1,0 +1,319 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { ExpandableText } from "@/components/expandable-text";
+import { FileText, Mic } from "lucide-react";
+
+export type ParrotTone = {
+  id: string;
+  slug: string;
+  task: string;
+  constraints: string;
+  max_words: number | null;
+  description: string | null;
+  is_active: boolean;
+  sort_order: number | null;
+  created_at: string;
+  updated_at: string;
+  keywords: string[] | null;
+};
+
+const SLUG_STYLE: Record<string, "default" | "voice" | "outline"> = {
+  text: "default",
+  vc: "voice",
+};
+
+const SYSTEM_PROMPT_SLUGS = new Set(["role", "voice"]);
+const RESPONSE_TONE_SLUGS = new Set(["text", "vc"]);
+
+function partitionTones(tones: ParrotTone[]) {
+  const systemPromptBlocks = tones.filter((t) => SYSTEM_PROMPT_SLUGS.has(t.slug));
+  const responseTones = tones.filter((t) => RESPONSE_TONE_SLUGS.has(t.slug));
+  const other = tones.filter(
+    (t) => !SYSTEM_PROMPT_SLUGS.has(t.slug) && !RESPONSE_TONE_SLUGS.has(t.slug)
+  );
+  return { systemPromptBlocks, responseTones, other };
+}
+
+function getToneTypeLabel(slug: string): string {
+  if (slug === "vc") return "Voice channel";
+  if (slug === "role") return "Role";
+  if (slug === "voice") return "Voice style";
+  return slug.charAt(0).toUpperCase() + slug.slice(1);
+}
+
+function formatRelative(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    const diffMs = Date.now() - d.getTime();
+    const days = Math.floor(diffMs / 86_400_000);
+    if (days < 1) return "today";
+    if (days === 1) return "yesterday";
+    if (days < 7) return `${days} days ago`;
+    return d.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+type Props = {
+  tones: ParrotTone[];
+};
+
+function ToneRow({
+  tone,
+  onView,
+}: {
+  tone: ParrotTone;
+  onView: (tone: ParrotTone) => void;
+}) {
+  return (
+    <li className="flex flex-wrap items-center gap-2 px-4 py-3 bg-card hover:bg-muted/30 transition-colors">
+      <span className="font-medium text-foreground min-w-[7rem]">
+        {tone.slug === "vc" ? (
+          <span className="flex items-center gap-1.5">
+            <Mic className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            {getToneTypeLabel(tone.slug)}
+          </span>
+        ) : SYSTEM_PROMPT_SLUGS.has(tone.slug) ? (
+          <span className="flex items-center gap-1.5">
+            <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            {getToneTypeLabel(tone.slug)}
+          </span>
+        ) : (
+          getToneTypeLabel(tone.slug)
+        )}
+      </span>
+      <div className="flex flex-1 flex-wrap items-center gap-1.5">
+        {SYSTEM_PROMPT_SLUGS.has(tone.slug) && (
+          <Badge variant="outline" className="text-[10px]">
+            System prompt block
+          </Badge>
+        )}
+        {!tone.is_active && (
+          <Badge variant="outline" className="text-[10px]">
+            Inactive
+          </Badge>
+        )}
+        {tone.max_words != null && (
+          <Badge
+            variant={SLUG_STYLE[tone.slug] ?? "outline"}
+            className="text-[10px]"
+          >
+            max {tone.max_words} words
+          </Badge>
+        )}
+        {Array.isArray(tone.keywords) &&
+          tone.keywords.slice(0, 4).map((kw) => (
+            <Badge
+              key={kw}
+              variant="outline"
+              className="text-[10px] capitalize"
+            >
+              {kw.replace(/-/g, " ")}
+            </Badge>
+          ))}
+        {Array.isArray(tone.keywords) && tone.keywords.length > 4 && (
+          <Badge variant="outline" className="text-[10px]">
+            +{tone.keywords.length - 4}
+          </Badge>
+        )}
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        className="shrink-0 bg-orange-300 hover:bg-orange-100"
+        onClick={() => onView(tone)}
+        aria-label={`View ${getToneTypeLabel(tone.slug)} details`}
+      >
+        View
+      </Button>
+    </li>
+  );
+}
+
+export function PersonalityToneList({ tones }: Props) {
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<ParrotTone | null>(null);
+  const { systemPromptBlocks, responseTones, other } = useMemo(
+    () => partitionTones(tones),
+    [tones]
+  );
+
+  const openDrawer = (tone: ParrotTone) => {
+    setSelected(tone);
+    setOpen(true);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) setSelected(null);
+  };
+
+  return (
+    <>
+      <div className="space-y-8">
+        {/* System prompt blocks: who the parrot is and how it sounds in the prompt */}
+        {systemPromptBlocks.length > 0 && (
+          <section>
+            <div className="mb-2">
+              <h2 className="text-sm font-semibold text-foreground">
+                System prompt blocks
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Who the parrot is and how it sounds in the system prompt. Used as fixed blocks (Role, Voice style).
+              </p>
+            </div>
+            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+              {systemPromptBlocks.map((tone) => (
+                <ToneRow key={tone.id} tone={tone} onView={openDrawer} />
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Response tones: how the parrot replies in chat vs in voice channel */}
+        {responseTones.length > 0 && (
+          <section>
+            <div className="mb-2">
+              <h2 className="text-sm font-semibold text-foreground">
+                Response tones
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                How the parrot replies: text chat (word limits, style) and voice channel (TTS).
+              </p>
+            </div>
+            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+              {responseTones.map((tone) => (
+                <ToneRow key={tone.id} tone={tone} onView={openDrawer} />
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Any other slugs from the DB */}
+        {other.length > 0 && (
+          <section>
+            <div className="mb-2">
+              <h2 className="text-sm font-semibold text-foreground">
+                Other
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Tones that are not system prompt blocks or response tones.
+              </p>
+            </div>
+            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+              {other.map((tone) => (
+                <ToneRow key={tone.id} tone={tone} onView={openDrawer} />
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col sm:max-w-lg overflow-y-auto"
+        >
+          {selected && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex flex-wrap items-center gap-2">
+                  {selected.slug === "vc" ? (
+                    <span className="flex items-center gap-1.5">
+                      <Mic className="size-4" aria-hidden />
+                      Voice channel
+                    </span>
+                  ) : SYSTEM_PROMPT_SLUGS.has(selected.slug) ? (
+                    <span className="flex items-center gap-1.5">
+                      <FileText className="size-4" aria-hidden />
+                      {selected.slug === "role" ? "Role" : "Voice style"}
+                    </span>
+                  ) : (
+                    getToneTypeLabel(selected.slug)
+                  )}
+                  {SYSTEM_PROMPT_SLUGS.has(selected.slug) && (
+                    <Badge variant="outline" className="text-xs font-normal">
+                      System prompt block
+                    </Badge>
+                  )}
+                  {!selected.is_active && (
+                    <Badge variant="outline" className="text-xs">
+                      Inactive
+                    </Badge>
+                  )}
+                  {selected.max_words != null && (
+                    <Badge
+                      variant={SLUG_STYLE[selected.slug] ?? "outline"}
+                      className="text-xs"
+                    >
+                      max {selected.max_words} words
+                    </Badge>
+                  )}
+                </SheetTitle>
+                {selected.description?.trim() && (
+                  <p className="text-sm text-muted-foreground pt-1">
+                    {selected.description}
+                  </p>
+                )}
+              </SheetHeader>
+              <div className="flex flex-1 flex-col gap-6 px-4 pb-6">
+                <div>
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Task
+                  </h3>
+                  <ExpandableText className="mt-1 text-sm leading-relaxed text-foreground">
+                    {selected.task || "—"}
+                  </ExpandableText>
+                </div>
+                <div>
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Constraints
+                  </h3>
+                  <ExpandableText className="mt-1 text-sm leading-relaxed text-foreground">
+                    {selected.constraints || "—"}
+                  </ExpandableText>
+                </div>
+                {Array.isArray(selected.keywords) &&
+                  selected.keywords.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                        Keywords
+                      </h3>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selected.keywords.map((kw) => (
+                          <Badge
+                            key={kw}
+                            variant="outline"
+                            className="text-[10px] capitalize"
+                          >
+                            {kw.replace(/-/g, " ")}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                <p className="text-xs text-muted-foreground mt-auto">
+                  Updated {formatRelative(selected.updated_at)}
+                </p>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}

@@ -61,7 +61,7 @@ client.on('ready', async () => {
     }
     const parrotConfig = require('./config/parrot');
     if (process.env.PARROT_TONES_SOURCE?.trim()?.toLowerCase() === 'supabase') {
-        await parrotConfig.refreshTonesCache();
+        await parrotConfig.refreshPromptConfig();
     }
 
     // Start periodic jobs (announcements every 6h). Safe to call once.

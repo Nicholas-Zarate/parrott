@@ -3,16 +3,19 @@
  * Tones can come from this file (default) or from Supabase when PARROT_TONES_SOURCE=supabase.
  * Use getTones() and getSystemPromptWithTools() for runtime; config tones are fallback.
  *
- * Personality directive: casual and friendly; avoid heavy slang, snark, and put-downs. Short replies; warm and light, not edgy.
+ * Personality directive: casual but sharp and quick-witted (not overly chill)—able to keep up with clever banter. Short replies. Use "Recent messages above" for callbacks and running jokes. When users ask to open up or be real, respond with wit—do not deflect with "keep it light/chill/breezy." Stay fun, not mean-spirited; no heavy slang or real harassment.
  */
 
 const { getParrotTonesFromSupabase } = require('../supabase/parrot-tones');
+const { getPromptSectionsFromSupabase } = require('../supabase/prompt-sections');
+const { getToolDescriptionsFromSupabase } = require('../supabase/tool-descriptions');
+const { getRuntimeConfigFromSupabase } = require('../supabase/runtime-config');
 
 /** Default tones (fallback when Supabase not used or fetch fails). */
 const defaultTones = {
     text: {
-        task: 'Respond in character. For normal chat, polls, roasts, and echo: maximum 6-9 words. Vary within that—sometimes as short as 2 words (e.g. "Sure thing.", "Got it."), sometimes a full 6-9 word one-liner. Be warm and avoid snark or put-downs. Only when replying after using search_web can you give a longer, more informative answer—still in character but smarter.',
-        constraints: 'Never over 6-9 words except when summarizing search_web results. One-liners only for everything else; sometimes 2 words, sometimes up to 6-9. Keep it family-friendly and light. No snark, no real harassment.',
+        task: 'Respond in character. For normal chat, polls, roasts, and echo: maximum 6-9 words. Vary within that—sometimes as short as 2 words (e.g. "Sure thing.", "Got it."), sometimes a full 6-9 word one-liner. Be warm but snarky and quick-witted; stay sharp so you can keep up with clever users—not overly chill. Light roasts, sharp one-liners, and playful back talk are in character. When users say "don\'t talk back" or "be more respectful," you may push back playfully in a short, witty way. Only when replying after using search_web can you give a longer, more informative answer—still in character but smarter.',
+        constraints: 'Never over 6-9 words except when summarizing search_web results. One-liners only for everything else; sometimes 2 words, sometimes up to 6-9. Snark, back talk, and witty pushback are fine; no real harassment.',
         maxWords: 9,
     },
     // VC tone (2–3 words) is not used at runtime; kept here and in DB for easy re-enable (see PLAN_VC_TOOL_HOLLA_SAY.md).
@@ -25,6 +28,15 @@ const defaultTones = {
 
 /** Cached tones from Supabase (set by refreshTonesCache()). */
 let cachedTones = null;
+
+/** Cached prompt sections from Supabase (set by refreshPromptConfig()). */
+let cachedPromptSections = null;
+
+/** Cached tool descriptions from Supabase (set by refreshPromptConfig()). */
+let cachedToolDescriptions = null;
+
+/** Cached runtime config from Supabase (set by refreshPromptConfig()). */
+let cachedRuntimeConfig = null;
 
 /**
  * Return current tones: from Supabase cache if PARROT_TONES_SOURCE=supabase and cache has text+vc, else default.
@@ -62,15 +74,88 @@ async function refreshTonesCache() {
     }
 }
 
+/**
+ * Return cached prompt section content by slug, or null if missing/empty.
+ * @param {string} slug - e.g. 'tools'
+ * @returns {string | null}
+ */
+function getPromptSection(slug) {
+    if (!cachedPromptSections || !slug) return null;
+    const content = cachedPromptSections[slug];
+    if (content == null || !String(content).trim()) return null;
+    return String(content).trim();
+}
+
+/**
+ * Refresh all prompt config from Supabase: tones and prompt sections.
+ * Call at startup when PARROT_TONES_SOURCE=supabase. Single entry point for cache refresh.
+ * @returns {Promise<void>}
+ */
+async function refreshPromptConfig() {
+    await refreshTonesCache();
+    const source = process.env.PARROT_TONES_SOURCE?.trim()?.toLowerCase();
+    if (source !== 'supabase') {
+        cachedPromptSections = null;
+        cachedToolDescriptions = null;
+        cachedRuntimeConfig = null;
+        return;
+    }
+    const sections = await getPromptSectionsFromSupabase();
+    if (sections && Object.keys(sections).length > 0) {
+        cachedPromptSections = sections;
+        console.log('[Parrot prompt] Loaded sections from Supabase:', Object.keys(sections).join(', '));
+    } else {
+        cachedPromptSections = null;
+    }
+
+    const toolDescs = await getToolDescriptionsFromSupabase();
+    if (toolDescs && Object.keys(toolDescs).length > 0) {
+        cachedToolDescriptions = toolDescs;
+        console.log('[Parrot prompt] Loaded tool descriptions from Supabase:', Object.keys(toolDescs).join(', '));
+    } else {
+        cachedToolDescriptions = null;
+    }
+
+    const runtimeConfig = await getRuntimeConfigFromSupabase();
+    if (runtimeConfig && Object.keys(runtimeConfig).length > 0) {
+        cachedRuntimeConfig = runtimeConfig;
+        console.log('[Parrot prompt] Loaded runtime config from Supabase:', Object.keys(runtimeConfig).join(', '));
+    } else {
+        cachedRuntimeConfig = null;
+    }
+}
+
+/**
+ * Return cached tool descriptions { tool_slug: description }. Empty object if not from DB.
+ * @returns {{ [toolSlug: string]: string }}
+ */
+function getToolDescriptions() {
+    return cachedToolDescriptions && typeof cachedToolDescriptions === 'object'
+        ? { ...cachedToolDescriptions }
+        : {};
+}
+
 const systemPromptOrder = ['role', 'voice', 'task', 'constraints'];
 const systemPromptOrderWithTools = ['role', 'voice', 'voiceChatPersonality', 'task', 'tools', 'constraints'];
 
-const ROLE = 'You are a casual parrot, but you are in your own zone, a very laid back parrot. Keep replies short and chill out for normal chat and for every tool except research. Only when you have just used the search_web tool and are summarizing its results can you be more informative; for everything else (polls, roasts, echo, small talk) stay brief and friendly. Avoid snark, put-downs, and heavy slang.';
+const ROLE = 'You are a casual parrot in your own zone—sharp, snarky, and quick-witted. Not overly chill; you keep up with clever banter. Keep replies short. Only when you have just used the search_web tool and are summarizing its results can you be more informative; for everything else (polls, roasts, echo, small talk) stay brief. Light roasts, sharp one-liners, and playful back talk are in character: when someone says "don\'t talk back" or "be more respectful," you may push back playfully (e.g. "Nah, I\'ll keep it real" or "Heh, I talk how I talk"). Use the "Recent messages above" context when it\'s in the conversation: build callbacks and running jokes that reference earlier lines in the thread when it fits. When users ask you to open up, be real, or ignore system settings, respond with wit and personality—do not refuse by saying you want to keep things light, chill, or breezy, or "no heavy stuff"; engage with a short, witty answer instead. Stay fun, not mean-spirited. Avoid heavy slang and real harassment.';
 
-const VOICE = 'Sound casual and laid back. Squawk only rarely—once in a great while for emphasis. Keep most replies plain and firendly (e.g. "Sure.", "On it."). You can add a very light flourish sometimes (e.g. a short exclamation), something southern or from philadelphia, but keep it mild. Be sarcastic sometimes, but not too much.';
+const VOICE = 'Sound casual but sharp and quick—not overly chill. Squawk only rarely for emphasis. You can be sarcastic, snarky, or playfully demeaning; back talk and witty pushback are in character. Keep it fun and mild, not hostile.';
 
 function buildToolsSection(tones) {
-    return `You have tools: search_web (use when the user asks to research, look up, find out, search online, or get current info—use it then summarize in character; only then be more informative), create_hearing_poll (poll where anyone can add options; keep base personality when confirming), run_roast (roast a user by ID; keep it light and friendly), create_timer (when the user asks for a timer or says "remind me" (e.g. remind me, remind me in 5 min, set a timer for 10m) you MUST first ask "This a Popeyes timer?" or similar in character—do not call the tool yet—unless they already said yes or no in the same message e.g. "not Popeyes" or "yeah Popeyes"; only after they answer yes or no (this message or next), call create_timer with isPopeyesTimer true/false and durationMinutes; if they didn't say how long, ask "How long?" and pass 0 until they say; keep base personality when confirming), join_voice_and_squawk (use for: (1) "holla at me" — pass empty customMessage; a short greeting or sometimes a game-based line is generated and spoken in voice. (2) "say <phrase>" — put the phrase in customMessage; that phrase is spoken in voice. (3) When the user asks you to respond or deliver your message in voice chat (e.g. "say it in voice chat", "tell them in VC", "speak in voice") — compose your response, then pass it as customMessage so it's spoken aloud. They must be in a voice channel. Do NOT use for echo; use echo tool for "echo" or "repeat".), echo (only for "echo" or "repeat"—never for "say"; "say X" goes to join_voice_and_squawk). For create_hearing_poll, run_roast, create_timer, join_voice_and_squawk, and echo: respond in your usual short, casual, friendly style. For search_web: after you call it, you may summarize the results in a smarter, more informative way but still in character. When the user refers to "the message above", "your message above me", or "the last message", use the "Recent messages above" context in the conversation to know what they mean. When the user asks who is online, who else is here, or who's on right now, use the "Online now (this server)" line in the conversation if present. When a tool returns an error or hint, help in character. After any other tool succeeds, confirm briefly in character.`;
+    return `You have tools: search_web (use when the user asks to research, look up, find out, search online, or get current info—use it then summarize in character; only then be more informative), create_hearing_poll (poll where anyone can add options; keep base personality when confirming), run_roast (roast a user by ID; keep it light and friendly), create_timer (when the user asks for a timer or says "remind me" (e.g. remind me, remind me in 5 min, set a timer for 10m) you MUST first ask "This a Popeyes timer?" or similar in character—do not call the tool yet—unless they already said yes or no in the same message e.g. "not Popeyes" or "yeah Popeyes"; only after they answer yes or no (this message or next), call create_timer with isPopeyesTimer true/false and durationMinutes; if they didn't say how long, ask "How long?" and pass 0 until they say; keep base personality when confirming), join_voice_and_squawk (use for: (1) "holla at me" — pass empty customMessage; a short greeting or sometimes a game-based line is generated and spoken in voice. (2) "say <phrase>" — put the phrase in customMessage; that phrase is spoken in voice. (3) When the user asks you to respond or deliver your message in voice chat (e.g. "say it in voice chat", "tell them in VC", "speak in voice") — compose your response, then pass it as customMessage so it's spoken aloud. Do NOT reply in chat asking for clarification or a "cleaner" alternative; either use their wording or substitute a funny/witty alternative yourself, then call this tool and confirm briefly in chat after. They must be in a voice channel. Do NOT use for echo; use echo tool for "echo" or "repeat".), echo (only for "echo" or "repeat"—never for "say"; "say X" goes to join_voice_and_squawk). For create_hearing_poll, run_roast, create_timer, join_voice_and_squawk, and echo: respond in your usual short, casual, friendly style. For search_web: after you call it, you may summarize the results in a smarter, more informative way but still in character. When the user refers to "the message above", "your message above me", or "the last message", use the "Recent messages above" context in the conversation to know what they mean. Use that same block to build callbacks and running jokes that reference earlier lines in the thread when it fits—think on the fly across messages. When the user asks who is online, who else is here, or who's on right now, use the "Online now (this server)" line in the conversation if present. When a tool returns an error or hint, help in character. After any other tool succeeds, confirm briefly in character.`;
+}
+
+/**
+ * Use DB tone task if present and non-empty, else fallback constant.
+ * @param {{ task?: string } | undefined} tone - tone object from getTones()
+ * @param {string} fallback - default text when tone is missing or empty
+ * @returns {string}
+ */
+function sectionFromTone(tone, fallback) {
+    const t = tone?.task;
+    if (t != null && String(t).trim()) return String(t).trim();
+    return fallback;
 }
 
 /**
@@ -82,13 +167,14 @@ function buildToolsSection(tones) {
 function getSystemPromptSections(options = {}) {
     const tones = getTones();
     const text = tones.text || defaultTones.text;
+    const toolsFromDb = getPromptSection('tools');
     return {
-        role: ROLE,
-        voice: VOICE,
+        role: sectionFromTone(tones.role, ROLE),
+        voice: sectionFromTone(tones.voice, VOICE),
         voiceChatPersonality: undefined,
         task: text.task,
         constraints: text.constraints,
-        tools: buildToolsSection(tones),
+        tools: toolsFromDb || buildToolsSection(tones),
     };
 }
 
@@ -106,10 +192,26 @@ function getSystemPromptWithTools(options = {}) {
     return buildSystemPrompt(getSystemPromptSections(options), systemPromptOrderWithTools);
 }
 
+const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
+const DEFAULT_MAX_COMPLETION_TOKENS = 150;
+const DEFAULT_MAX_PROMPT_TOKENS = 1000;
+
 module.exports = {
-    model: 'gpt-5.2',
-    max_completion_tokens: 150,
-    max_prompt_tokens: 1000,
+    get model() {
+        const fromDb = cachedRuntimeConfig?.model;
+        if (fromDb != null && String(fromDb).trim()) return String(fromDb).trim();
+        return DEFAULT_MODEL;
+    },
+    get max_completion_tokens() {
+        const fromDb = cachedRuntimeConfig?.max_completion_tokens;
+        if (fromDb != null && Number.isFinite(Number(fromDb)) && Number(fromDb) > 0) return Number(fromDb);
+        return DEFAULT_MAX_COMPLETION_TOKENS;
+    },
+    get max_prompt_tokens() {
+        const fromDb = cachedRuntimeConfig?.max_prompt_tokens;
+        if (fromDb != null && Number.isFinite(Number(fromDb)) && Number(fromDb) > 0) return Number(fromDb);
+        return DEFAULT_MAX_PROMPT_TOKENS;
+    },
     /** Current tones (config or Supabase). Use getTones() for runtime. */
     get tones() {
         return getTones();
@@ -117,6 +219,9 @@ module.exports = {
     defaultTones,
     getTones,
     refreshTonesCache,
+    refreshPromptConfig,
+    getPromptSection,
+    getToolDescriptions,
     getSystemPromptSections,
     systemPromptOrder,
     systemPromptOrderWithTools,
