@@ -82,8 +82,9 @@ export function HistoryListWithFilters({ rows }: { rows: HistoryRowWithMeta[] })
     [rows, dateFrom, dateTo, channelId, userName, voiceOnly, roastOnly]
   );
 
-  const hasActiveFilters =
-    dateFrom || dateTo || channelId || userName || voiceOnly || roastOnly;
+  const hasActiveFilters = Boolean(
+    dateFrom || dateTo || channelId || userName || voiceOnly || roastOnly
+  );
 
   const clearFilters = () => {
     setDateFrom("");
