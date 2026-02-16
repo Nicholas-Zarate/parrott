@@ -13,7 +13,7 @@ assert(typeof config.voiceIfConnected === 'boolean', 'voiceIfConnected is a bool
 // --- Triggers object ---
 assert(config.triggers && typeof config.triggers === 'object', 'triggers object exists');
 
-const expectedTriggers = ['game_start', 'late_night', 'long_session', 'group_gaming', 'streaming', 'comeback'];
+const expectedTriggers = ['game_start', 'late_night', 'long_session', 'group_gaming', 'streaming', 'go_live', 'comeback'];
 for (const name of expectedTriggers) {
     const t = config.triggers[name];
     assert(t, `trigger "${name}" exists`);
@@ -24,6 +24,7 @@ for (const name of expectedTriggers) {
 // --- Specific cooldown values ---
 assert.strictEqual(config.triggers.game_start.cooldownMinutes, 90, 'game_start cooldown is 90 minutes');
 assert.strictEqual(config.triggers.streaming.cooldownMinutes, 60, 'streaming cooldown is 60 minutes');
+assert.strictEqual(config.triggers.go_live.cooldownMinutes, 60, 'go_live cooldown is 60 minutes');
 assert.strictEqual(config.triggers.late_night.cooldownMinutes, 360, 'late_night cooldown is 360 minutes');
 assert.strictEqual(config.triggers.long_session.cooldownMinutes, 360, 'long_session cooldown is 360 minutes');
 assert.strictEqual(config.triggers.group_gaming.cooldownMinutes, 240, 'group_gaming cooldown is 240 minutes');

@@ -1,17 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
+import { HistoryFilterHeader } from "@/components/history-filter-header";
 import { HistoryCard, type HistoryRow, type ParsedNames } from "@/components/history-card";
 import { HistoryField, UserTextIcon, ResponseTextIcon } from "@/components/history-field";
 
@@ -106,100 +96,28 @@ export function HistoryListWithFilters({ rows }: { rows: HistoryRowWithMeta[] })
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-muted/20 p-4">
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="date-from" className="text-xs text-muted-foreground">
-              Date from
-            </Label>
-            <Input
-              id="date-from"
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="h-8 w-36"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="date-to" className="text-xs text-muted-foreground">
-              Date to
-            </Label>
-            <Input
-              id="date-to"
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="h-8 w-36"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Channel</Label>
-            <Select value={channelId || "all"} onValueChange={(v) => setChannelId(v === "all" ? "" : v)}>
-              <SelectTrigger className="h-8 w-40" size="sm">
-                <SelectValue placeholder="All channels" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All channels</SelectItem>
-                {uniqueChannels.map(([id, name]) => (
-                  <SelectItem key={id} value={id}>
-                    # {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">User</Label>
-            <Select value={userName || "all"} onValueChange={(v) => setUserName(v === "all" ? "" : v)}>
-              <SelectTrigger className="h-8 w-36" size="sm">
-                <SelectValue placeholder="All users" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All users</SelectItem>
-                {uniqueUsers.map((u) => (
-                  <SelectItem key={u} value={u}>
-                    @{u}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-4">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-              <Checkbox
-                checked={voiceOnly}
-                onCheckedChange={(c) => setVoiceOnly(c === true)}
-                aria-label="Voice only"
-                className="border-border bg-background data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-              />
-              <span>Voice</span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-              <Checkbox
-                checked={roastOnly}
-                onCheckedChange={(c) => setRoastOnly(c === true)}
-                aria-label="Roast only"
-                className="border-border bg-background data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-              />
-              <span>Roast</span>
-            </label>
-          </div>
-        </div>
-        {hasActiveFilters ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 text-muted-foreground"
-            onClick={clearFilters}
-          >
-            Clear filters
-          </Button>
-        ) : null}
-      </div>
+      <HistoryFilterHeader
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+        channelId={channelId}
+        onChannelIdChange={setChannelId}
+        uniqueChannels={uniqueChannels}
+        userName={userName}
+        onUserNameChange={setUserName}
+        uniqueUsers={uniqueUsers}
+        voiceOnly={voiceOnly}
+        onVoiceOnlyChange={setVoiceOnly}
+        roastOnly={roastOnly}
+        onRoastOnlyChange={setRoastOnly}
+        hasActiveFilters={hasActiveFilters}
+        onClearFilters={clearFilters}
+      />
 
       <p className="text-xs text-muted-foreground">
         Showing {filteredRows.length} of {rows.length} entries
+        {hasActiveFilters ? " (filtered)" : ""}.
       </p>
 
       <ul className="flex flex-col gap-2">

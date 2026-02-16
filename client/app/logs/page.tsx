@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { LogsTerminal } from "@/components/logs-terminal";
+import { LogsWithFilters } from "@/components/logs-with-filters";
 
 const TABLE = "logs";
 const LOGS_LIMIT = 200;
@@ -44,7 +44,7 @@ export default async function LogsPage() {
       </p>
 
       <div className="mt-6">
-        <LogsTerminal logs={logs} />
+        <LogsWithFilters logs={logs} />
       </div>
     </div>
   );

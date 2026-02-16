@@ -29,6 +29,8 @@ const TRIGGER_PROMPTS = {
         `${ctx.playerCount} users are now all playing "${ctx.game}" together. Write a very short casual reaction (6-9 words max) about the group gaming session. Be hyped but chill.`,
     streaming: (ctx) =>
         `A user just went live streaming "${ctx.stream}". Write a very short casual reaction (6-9 words max) about them streaming. Be supportive and laid back.`,
+    go_live: (ctx) =>
+        `A user just went live (screen share) in voice channel "${ctx?.channelName || 'voice'}". Write a very short casual reaction (6-9 words max) about them going live. Be supportive and laid back.`,
     comeback: (ctx) =>
         `A user just came back online after being away for about ${ctx.hoursAway} hours. Write a very short casual greeting (6-9 words max) welcoming them back. Be warm and friendly.`,
 };
@@ -95,6 +97,7 @@ function getFallbackMessage(triggerType, context) {
         case 'long_session': return `you been on ${context.game} for a minute`;
         case 'group_gaming': return `y'all really in ${context.game} deep`;
         case 'streaming': return `oh we live huh`;
+        case 'go_live': return `someone's going live in ${context?.channelName || 'voice'}`;
         case 'comeback': return `look who showed up`;
         default: return 'SQUAWK.';
     }
@@ -191,11 +194,12 @@ async function deliver(client, guild, trigger) {
         console.log(`${LOG_PREFIX} Voice TTS skipped — ${displayName} is not in a voice channel.`);
     }
 
-    // 4. Log to Supabase
+    // 4. Log to Supabase (user_id + user_name so we know who triggered the activity)
     console.log(`${LOG_PREFIX} Logging event to Supabase (trigger: ${triggerType}, user: ${userId}, delivered: [${deliveredTo.join(', ')}])...`);
     const dbResult = await logActivityEvent({
         guild_id: guild.id,
         user_id: userId,
+        user_name: displayName,
         trigger_type: triggerType,
         activity_name: activityName ?? null,
         activity_type: activityType ?? null,

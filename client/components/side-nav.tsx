@@ -2,8 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useCallback } from "react";
-import { Home, History, Menu, PanelLeftClose, PanelLeft, Terminal } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import {
+  Home,
+  History,
+  Menu,
+  PanelLeftClose,
+  PanelLeft,
+  Terminal,
+  Activity,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,11 +23,23 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
+const activitiesChildren = [
+  { href: "/activities", label: "Feed" },
+  { href: "/activities/scenarios", label: "Scenarios" },
+] as const;
+
 const navItems = [
   { href: "/", label: "Home", icon: Home },
   { href: "/history", label: "History", icon: History },
+  { href: "/activities", label: "Activities", icon: Activity, children: activitiesChildren },
   { href: "/logs", label: "Logs", icon: Terminal },
 ] as const;
+
+type NavItem = (typeof navItems)[number];
+
+function isActivitiesGroup(item: NavItem): item is NavItem & { children: typeof activitiesChildren } {
+  return "children" in item && Array.isArray(item.children);
+}
 
 /**
  * Shared nav link list used by both desktop sidebar and mobile drawer.
@@ -30,10 +52,91 @@ function NavLinks({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const activitiesOpen = pathname.startsWith("/activities");
+  const [activitiesExpanded, setActivitiesExpanded] = useState(activitiesOpen);
+
+  useEffect(() => {
+    if (activitiesOpen) setActivitiesExpanded(true);
+  }, [activitiesOpen]);
 
   return (
     <ul className="flex flex-col gap-1">
-      {navItems.map(({ href, label, icon: Icon }) => {
+      {navItems.map((item) => {
+        if (isActivitiesGroup(item)) {
+          const { href, label, icon: Icon, children } = item;
+          const isParentActive = pathname.startsWith(href);
+          if (collapsed) {
+            return (
+              <li key={href}>
+                <Link
+                  href={children[0].href}
+                  onClick={onNavigate}
+                  title="Activities"
+                  className={cn(
+                    "flex items-center rounded-md text-sm font-medium transition-colors",
+                    "justify-center px-2 py-2",
+                    isParentActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden />
+                </Link>
+              </li>
+            );
+          }
+          return (
+            <li key={href} className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => setActivitiesExpanded((e) => !e)}
+                className={cn(
+                  "flex items-center rounded-md text-sm font-medium transition-colors w-full",
+                  "gap-3 px-3 py-2",
+                  isParentActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+                aria-expanded={activitiesExpanded}
+              >
+                <Icon className="size-4 shrink-0" aria-hidden />
+                <span className="flex-1 text-left">{label}</span>
+                {activitiesExpanded ? (
+                  <ChevronDown className="size-4 shrink-0" aria-hidden />
+                ) : (
+                  <ChevronRight className="size-4 shrink-0" aria-hidden />
+                )}
+              </button>
+              {activitiesExpanded ? (
+                <ul className="flex flex-col gap-0.5 pl-4 border-l border-sidebar-border ml-2">
+                  {children.map((sub) => {
+                    const isSubActive =
+                      sub.href === "/activities"
+                        ? pathname === "/activities"
+                        : pathname.startsWith(sub.href);
+                    return (
+                      <li key={sub.href}>
+                        <Link
+                          href={sub.href}
+                          onClick={onNavigate}
+                          className={cn(
+                            "flex items-center rounded-md text-sm font-medium transition-colors py-1.5 pr-2 pl-2 -ml-px border-l-2",
+                            isSubActive
+                              ? "border-sidebar-accent-foreground bg-sidebar-accent/50 text-sidebar-accent-foreground"
+                              : "border-transparent text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                          )}
+                        >
+                          {sub.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </li>
+          );
+        }
+        const { href, label, icon: Icon } = item;
         const isActive =
           href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (

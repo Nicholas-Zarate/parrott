@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Flame, Mic } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 export type HistoryRow = {
   id: string;
@@ -25,28 +25,6 @@ type HistoryCardProps = {
   formattedDate: string;
   children: React.ReactNode;
 };
-
-function Chip({
-  children,
-  className,
-  title,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  title?: string;
-}) {
-  return (
-    <span
-      title={title}
-      className={cn(
-        "inline-flex items-center rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-foreground",
-        className
-      )}
-    >
-      {children}
-    </span>
-  );
-}
 
 export function HistoryCard({
   row,
@@ -87,29 +65,31 @@ export function HistoryCard({
             </span>
             <CardTitle className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-sm font-medium text-foreground">
               {parsed.channelName ? (
-                <Chip title={`channel_id: ${row.channel_id ?? ""}`}>
+                <Badge variant="channel" title={`channel_id: ${row.channel_id ?? ""}`}>
                   # {parsed.channelName}
-                </Chip>
+                </Badge>
               ) : row.channel_id ? (
-                <Chip className="font-mono">ch: {row.channel_id}</Chip>
+                <Badge variant="default" className="font-mono">
+                  ch: {row.channel_id}
+                </Badge>
               ) : null}
               {parsed.userName ? (
-                <Chip>@{parsed.userName}</Chip>
+                <Badge variant="default">@{parsed.userName}</Badge>
               ) : null}
               {hasVoiceTool ? (
-                <Chip className="border-purple-200 bg-purple-50 text-purple-800 dark:border-purple-800 dark:bg-purple-950/50 dark:text-purple-200">
-                  <Mic className="mr-1 size-3" aria-hidden />
+                <Badge variant="voice" icon={<Mic aria-hidden />}>
                   voice
-                </Chip>
+                </Badge>
               ) : null}
               {hasRoastTool ? (
-                <Chip className="border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
-                  <Flame className="mr-1 size-3" aria-hidden />
+                <Badge variant="roast" icon={<Flame aria-hidden />}>
                   roast
-                </Chip>
+                </Badge>
               ) : null}
               {otherTools.map((t) => (
-                <Chip key={t}>{t}</Chip>
+                <Badge key={t} variant="default">
+                  {t}
+                </Badge>
               ))}
             </CardTitle>
           </div>
