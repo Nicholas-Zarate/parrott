@@ -138,6 +138,7 @@ test('cooldown allows different trigger types independently', () => {
 test('listener module exports expected functions', () => {
     const listener = require('../activity/listener');
     assert(typeof listener.handlePresenceUpdate === 'function', 'handlePresenceUpdate exported');
+    assert(typeof listener.handleVoiceStateUpdate === 'function', 'handleVoiceStateUpdate exported');
     assert(typeof listener.init === 'function', 'init exported');
     assert(typeof listener.shutdown === 'function', 'shutdown exported');
     assert(listener.trackingState, 'trackingState exported');
@@ -199,6 +200,7 @@ test('supabase activity-listeners module exports expected functions', () => {
                 ['long_session', { game: 'Test', hoursPlayed: 4 }],
                 ['group_gaming', { game: 'Test', playerCount: 3 }],
                 ['streaming', { stream: 'Twitch' }],
+                ['go_live', { channelName: 'annex' }],
                 ['comeback', { hoursAway: 25 }],
             ];
             for (const [type, ctx] of cases) {

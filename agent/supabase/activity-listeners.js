@@ -12,6 +12,7 @@ const TABLE = 'activity_listeners';
  * @param {{
  *   guild_id: string;
  *   user_id: string;
+ *   user_name?: string | null;
  *   trigger_type: string;
  *   activity_name?: string | null;
  *   activity_type?: number | null;
@@ -31,6 +32,7 @@ async function logActivityEvent(row) {
     const record = {
         guild_id: String(row.guild_id),
         user_id: String(row.user_id),
+        user_name: row.user_name != null ? String(row.user_name) : null,
         trigger_type: String(row.trigger_type),
         activity_name: row.activity_name != null ? String(row.activity_name) : null,
         activity_type: row.activity_type != null ? Number(row.activity_type) : null,

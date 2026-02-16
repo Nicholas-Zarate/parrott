@@ -1,10 +1,10 @@
 /**
- * Main presenceUpdate handler for activity-triggered messages.
+ * Activity-triggered message handlers (presence and voice).
  *
- * Flow: presenceUpdate → filter (bot, no guild) → detect triggers → check cooldowns → deliver
+ * Flow: presenceUpdate → filter → detect triggers → cooldown → deliver
+ *       voiceStateUpdate → detect Go Live → cooldown → deliver (same path)
  *
- * This module owns the shared tracking state (gameStartTimes, lastSeen) and
- * wires together triggers.js, cooldown.js, and deliver.js.
+ * This module owns the shared tracking state and wires triggers, cooldown, and deliver.
  */
 
 const activityConfig = require('../config/activity');
@@ -54,6 +54,40 @@ function pruneTrackingState() {
  * handling of rapid presence updates for the same user.
  */
 const processingUsers = new Set();
+
+/**
+ * Process a single trigger: check config, cooldown, then deliver and record.
+ * Shared by presence and voice (go_live) handlers.
+ *
+ * @param {import('discord.js').Client} client
+ * @param {import('discord.js').Guild} guild
+ * @param {{ triggerType: string, userId: string, activityName?: string, activityType?: number, context: object }} trigger
+ * @param {string} displayName - For logging
+ * @returns {Promise<boolean>} true if delivered, false if skipped (disabled or cooldown)
+ */
+async function processOneTrigger(client, guild, trigger, displayName) {
+    const cfg = activityConfig.triggers[trigger.triggerType];
+    if (!cfg?.enabled) return false;
+
+    const { allowed, retryAfterMs } = cooldown.check(trigger.userId, trigger.triggerType, cfg.cooldownMinutes);
+    if (!allowed) {
+        const retryMin = retryAfterMs ? Math.ceil(retryAfterMs / 60000) : '?';
+        console.log(`${LOG_PREFIX} Cooldown BLOCKED ${trigger.triggerType} for ${displayName} — retry in ~${retryMin}min.`);
+        return false;
+    }
+    console.log(`${LOG_PREFIX} Cooldown PASSED for ${trigger.triggerType}/${displayName} (cooldown: ${cfg.cooldownMinutes}min).`);
+
+    console.log(`${LOG_PREFIX} >>> Delivering ${trigger.triggerType} for ${displayName} (activity: ${trigger.activityName || 'N/A'})...`);
+    try {
+        await deliver(client, guild, trigger);
+        cooldown.record(trigger.userId, trigger.triggerType);
+        console.log(`${LOG_PREFIX} <<< Delivered ${trigger.triggerType} for ${displayName}. Cooldown recorded.`);
+        return true;
+    } catch (err) {
+        console.error(`${LOG_PREFIX} <<< Delivery FAILED for ${trigger.triggerType}/${displayName}:`, err.message || err);
+        return false;
+    }
+}
 
 /**
  * Handle a presenceUpdate event. Called from discord-voting-bot.js.
@@ -110,47 +144,60 @@ async function handlePresenceUpdate(oldPresence, newPresence, client) {
         }
     }
 
-    // Filter triggers that pass cooldown
-    const actionable = [];
-    for (const trigger of triggers) {
-        const cfg = activityConfig.triggers[trigger.triggerType];
-        if (!cfg?.enabled) continue;
+    console.log(`${LOG_PREFIX} Processing ${triggers.length} trigger(s) for ${displayName}: ${triggers.map((t) => t.triggerType).join(', ')}`);
 
-        const { allowed, retryAfterMs } = cooldown.check(userId, trigger.triggerType, cfg.cooldownMinutes);
-        if (allowed) {
-            console.log(`${LOG_PREFIX} Cooldown PASSED for ${trigger.triggerType}/${displayName} (cooldown: ${cfg.cooldownMinutes}min).`);
-            actionable.push(trigger);
-        } else {
-            const retryMin = retryAfterMs ? Math.ceil(retryAfterMs / 60000) : '?';
-            console.log(`${LOG_PREFIX} Cooldown BLOCKED ${trigger.triggerType} for ${displayName} — retry in ~${retryMin}min.`);
-        }
-    }
-
-    if (actionable.length === 0) {
-        console.log(`${LOG_PREFIX} All triggers for ${displayName} blocked by cooldown.`);
-        return;
-    }
-
-    console.log(`${LOG_PREFIX} Processing ${actionable.length} trigger(s) for ${displayName}: ${actionable.map((t) => t.triggerType).join(', ')}`);
-
-    // Mark user as processing to prevent duplicate handling
     processingUsers.add(userId);
-
     try {
-        // Process triggers sequentially (one AI call + delivery at a time per user)
-        for (const trigger of actionable) {
-            console.log(`${LOG_PREFIX} >>> Delivering ${trigger.triggerType} for ${displayName} (activity: ${trigger.activityName || 'N/A'})...`);
-            try {
-                await deliver(client, guild, trigger);
-                cooldown.record(userId, trigger.triggerType);
-                console.log(`${LOG_PREFIX} <<< Delivered ${trigger.triggerType} for ${displayName}. Cooldown recorded.`);
-            } catch (err) {
-                console.error(`${LOG_PREFIX} <<< Delivery FAILED for ${trigger.triggerType}/${displayName}:`, err.message || err);
-            }
+        for (const trigger of triggers) {
+            await processOneTrigger(client, guild, trigger, displayName);
         }
     } finally {
         processingUsers.delete(userId);
         console.log(`${LOG_PREFIX} Finished processing for ${displayName}. Released lock.`);
+    }
+}
+
+/**
+ * Handle voiceStateUpdate: fire go_live trigger when a user starts Go Live (screen share) in VC.
+ * Called from discord-voting-bot.js. Uses same cooldown/deliver path as presence triggers.
+ *
+ * @param {import('discord.js').VoiceState|null} oldState
+ * @param {import('discord.js').VoiceState} newState
+ * @param {import('discord.js').Client} client
+ */
+async function handleVoiceStateUpdate(oldState, newState, client) {
+    if (newState.member?.user?.bot) return;
+    const guild = newState.guild;
+    if (!guild || !newState.channel) return;
+
+    // Only fire when user just started streaming (Go Live), not when they stopped or were already streaming
+    if (newState.streaming !== true || oldState?.streaming === true) return;
+
+    const userId = newState.id;
+    const displayName = newState.member?.displayName ?? newState.member?.user?.username ?? userId;
+    const channelName = newState.channel?.name ?? 'voice';
+
+    console.log(`${LOG_PREFIX} go_live: ${displayName} (${userId}) started Go Live in #${channelName}.`);
+
+    if (processingUsers.has(userId)) {
+        console.log(`${LOG_PREFIX} Skipping ${displayName} — already processing a trigger for this user.`);
+        return;
+    }
+
+    const trigger = {
+        triggerType: 'go_live',
+        userId,
+        activityName: channelName,
+        activityType: null,
+        context: { channelName },
+    };
+
+    processingUsers.add(userId);
+    try {
+        await processOneTrigger(client, guild, trigger, displayName);
+    } finally {
+        processingUsers.delete(userId);
+        console.log(`${LOG_PREFIX} Finished processing go_live for ${displayName}. Released lock.`);
     }
 }
 
@@ -186,6 +233,7 @@ function shutdown() {
 
 module.exports = {
     handlePresenceUpdate,
+    handleVoiceStateUpdate,
     init,
     shutdown,
     trackingState,

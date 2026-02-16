@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Megaphone } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -63,15 +64,15 @@ export default async function Home() {
                   {formatRange(data.period_start, data.period_end)}
                 </span>
                 {data.metadata?.conversation_count != null ? (
-                  <span className="rounded-full border bg-muted/50 px-2 py-0.5">
+                  <Badge variant="default">
                     {data.metadata.conversation_count} conversation{data.metadata.conversation_count === 1 ? "" : "s"}
-                  </span>
+                  </Badge>
                 ) : null}
                 {data.metadata?.tools_used
                   ? Object.entries(data.metadata.tools_used).map(([tool, count]) => (
-                      <span key={tool} className="rounded-full border bg-muted/50 px-2 py-0.5">
+                      <Badge key={tool} variant="default">
                         {tool}: {count}
-                      </span>
+                      </Badge>
                     ))
                   : null}
               </div>

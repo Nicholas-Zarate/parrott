@@ -9,7 +9,7 @@ const roast = require('./commands/roast');
 const mention = require('./abilities/mention');
 const { isBotMentionedInContent } = require('./abilities/mention/format');
 const { startScheduler } = require('./jobs/scheduler');
-const { handlePresenceUpdate, init: initActivityListener } = require('./activity/listener');
+const { handlePresenceUpdate, handleVoiceStateUpdate, init: initActivityListener } = require('./activity/listener');
 
 /** Discord permission integer for the bot invite URL (OAuth2). Override with INVITE_PERMISSIONS in .env if needed. Voice (squawk) needs Connect + Speak; re-invite with permissions that include those if the bot cannot join VC. */
 const INVITE_PERMISSIONS = process.env.INVITE_PERMISSIONS || '562955322199104';
@@ -69,6 +69,20 @@ client.on('ready', async () => {
 
     // Initialize activity listener (presenceUpdate triggers).
     initActivityListener();
+    // Request guild members with presences so the gateway sends us presenceUpdate events (e.g. streaming).
+    // Without this, Discord often does not send presence for members in larger/lazy-loaded guilds.
+    for (const [guildId, guild] of client.guilds.cache) {
+        guild.members
+            .fetch({ query: '', limit: 0, withPresences: true })
+            .then((members) => {
+                console.log(`[presence] Requested members with presences for ${guild.name}: ${members.size} members. You should now receive presenceUpdate when they stream.`);
+            })
+            .catch((err) => {
+                console.error(`[presence] Failed to request members for ${guild.name}:`, err.message || err);
+            });
+    }
+    // All console.log/warn/error are sent to terminal and to Supabase (logs table) via patchConsole().
+    console.log('[Logs] Console output is sent to this terminal AND to Supabase table "logs". Check both to verify.');
 });
 
 // If MENTION_DEBUG_GATEWAY=1, log raw MESSAGE_CREATE from Discord. If you see [Gateway RAW] but no [Debug] messageCreate, the client dropped the event (e.g. channel not resolved).
@@ -132,8 +146,18 @@ client.on('messageCreate', async (message) => {
 });
 
 client.on('presenceUpdate', (oldPresence, newPresence) => {
+    // Minimal diagnostic (appears in terminal and Supabase via patchConsole): confirm we receive the event at all.
+    const uid = newPresence?.userId ?? '?';
+    const gid = newPresence?.guild?.id ?? 'null';
+    console.log('[presenceUpdate] received: userId=' + uid + ' guildId=' + gid);
     handlePresenceUpdate(oldPresence, newPresence, client).catch((err) => {
         console.error('[presenceUpdate] Unhandled error:', err.message || err);
+    });
+});
+
+client.on('voiceStateUpdate', (oldState, newState) => {
+    handleVoiceStateUpdate(oldState, newState, client).catch((err) => {
+        console.error('[voiceStateUpdate] Unhandled error:', err.message || err);
     });
 });
 

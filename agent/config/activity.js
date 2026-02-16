@@ -50,6 +50,12 @@ module.exports = {
             cooldownMinutes: 60,
         },
 
+        /** React when a user starts Go Live (screen share) in a voice channel. Uses voiceStateUpdate. */
+        go_live: {
+            enabled: true,
+            cooldownMinutes: 60,
+        },
+
         /** Greet a user who comes online after absenceMinutes+ of being offline. */
         comeback: {
             enabled: true,
