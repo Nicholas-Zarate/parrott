@@ -11,6 +11,7 @@ const activityConfig = require('../config/activity');
 const { detectAll } = require('./triggers');
 const cooldown = require('./cooldown');
 const { deliver } = require('./deliver');
+const { getResolvedSettings } = require('./settings-resolver');
 
 const LOG_PREFIX = '[Activity listener]';
 
@@ -57,29 +58,29 @@ const processingUsers = new Set();
 
 /**
  * Process a single trigger: check config, cooldown, then deliver and record.
- * Shared by presence and voice (go_live) handlers.
+ * Shared by presence and voice (go_live) handlers. Uses resolved settings (DB or file).
  *
  * @param {import('discord.js').Client} client
  * @param {import('discord.js').Guild} guild
  * @param {{ triggerType: string, userId: string, activityName?: string, activityType?: number, context: object }} trigger
  * @param {string} displayName - For logging
+ * @param {object} resolved - From getResolvedSettings(guild.id, trigger.triggerType): enabled, cooldownMinutes, deliverChannel, deliverDm, deliverVoice, etc.
  * @returns {Promise<boolean>} true if delivered, false if skipped (disabled or cooldown)
  */
-async function processOneTrigger(client, guild, trigger, displayName) {
-    const cfg = activityConfig.triggers[trigger.triggerType];
-    if (!cfg?.enabled) return false;
+async function processOneTrigger(client, guild, trigger, displayName, resolved) {
+    if (!resolved?.enabled) return false;
 
-    const { allowed, retryAfterMs } = cooldown.check(trigger.userId, trigger.triggerType, cfg.cooldownMinutes);
+    const { allowed, retryAfterMs } = cooldown.check(trigger.userId, trigger.triggerType, resolved.cooldownMinutes);
     if (!allowed) {
         const retryMin = retryAfterMs ? Math.ceil(retryAfterMs / 60000) : '?';
         console.log(`${LOG_PREFIX} Cooldown BLOCKED ${trigger.triggerType} for ${displayName} — retry in ~${retryMin}min.`);
         return false;
     }
-    console.log(`${LOG_PREFIX} Cooldown PASSED for ${trigger.triggerType}/${displayName} (cooldown: ${cfg.cooldownMinutes}min).`);
+    console.log(`${LOG_PREFIX} Cooldown PASSED for ${trigger.triggerType}/${displayName} (cooldown: ${resolved.cooldownMinutes}min).`);
 
     console.log(`${LOG_PREFIX} >>> Delivering ${trigger.triggerType} for ${displayName} (activity: ${trigger.activityName || 'N/A'})...`);
     try {
-        await deliver(client, guild, trigger);
+        await deliver(client, guild, trigger, resolved);
         cooldown.record(trigger.userId, trigger.triggerType);
         console.log(`${LOG_PREFIX} <<< Delivered ${trigger.triggerType} for ${displayName}. Cooldown recorded.`);
         return true;
@@ -149,7 +150,8 @@ async function handlePresenceUpdate(oldPresence, newPresence, client) {
     processingUsers.add(userId);
     try {
         for (const trigger of triggers) {
-            await processOneTrigger(client, guild, trigger, displayName);
+            const resolved = await getResolvedSettings(guild.id, trigger.triggerType);
+            await processOneTrigger(client, guild, trigger, displayName, resolved);
         }
     } finally {
         processingUsers.delete(userId);
@@ -192,9 +194,10 @@ async function handleVoiceStateUpdate(oldState, newState, client) {
         context: { channelName },
     };
 
+    const resolved = await getResolvedSettings(guild.id, 'go_live');
     processingUsers.add(userId);
     try {
-        await processOneTrigger(client, guild, trigger, displayName);
+        await processOneTrigger(client, guild, trigger, displayName, resolved);
     } finally {
         processingUsers.delete(userId);
         console.log(`${LOG_PREFIX} Finished processing go_live for ${displayName}. Released lock.`);

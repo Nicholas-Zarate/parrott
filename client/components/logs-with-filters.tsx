@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import { LogsTerminal, type LogRow } from "@/components/logs-terminal";
 import { LogsFilterHeader } from "@/components/logs-filter-header";
 
-/** Activity listener logs: [ActivityDB] from activity-listeners.js, [Activity listener] from activity/listener.js */
+/** Activity listener logs: [ActivityDB], [Activity listener] from listener.js, [Activity triggers] from triggers.js */
 function isActivityListenerLog(message: string): boolean {
-  return /\[ActivityDB\]|\[Activity listener\]/i.test(message);
+  return /\[ActivityDB\]|\[Activity listener\]|\[Activity triggers\]/i.test(message);
 }
 
 function startOfDay(iso: string): number {

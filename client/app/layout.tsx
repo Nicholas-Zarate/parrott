@@ -29,10 +29,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased`}
       >
-        <div className="flex min-h-screen flex-col md:flex-row">
+        <div className="flex h-dvh flex-col md:flex-row overflow-hidden">
           <MobileNav />
           <DesktopSideNav />
-          <main className="flex-1 overflow-auto bg-background">
+          <main className="flex-1 min-h-0 overflow-auto bg-background">
             {children}
           </main>
         </div>

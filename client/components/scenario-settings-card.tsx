@@ -18,12 +18,14 @@ type ScenarioSettingsCardProps = {
   setting: ScenarioSetting;
   scenarioConfig: ScenarioConfig;
   onSaved: () => void;
+  readOnly?: boolean;
 };
 
 export function ScenarioSettingsCard({
   setting,
   scenarioConfig,
   onSaved,
+  readOnly = false,
 }: ScenarioSettingsCardProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +98,7 @@ export function ScenarioSettingsCard({
               <Checkbox
                 checked={setting.enabled}
                 onCheckedChange={(v) => handleChecked("enabled", v === true)}
-                disabled={saving}
+                disabled={saving || readOnly}
                 aria-label={`${label}: scenario on/off`}
               />
               <span className="flex items-center gap-1.5 text-sm">
@@ -108,7 +110,7 @@ export function ScenarioSettingsCard({
               <Checkbox
                 checked={setting.deliverChannel}
                 onCheckedChange={(v) => handleChecked("deliver_channel", v === true)}
-                disabled={saving}
+                disabled={saving || readOnly}
                 aria-label={`${label}: post to channel`}
               />
               <span className="flex items-center gap-1.5 text-sm">
@@ -120,7 +122,7 @@ export function ScenarioSettingsCard({
               <Checkbox
                 checked={setting.deliverDm}
                 onCheckedChange={(v) => handleChecked("deliver_dm", v === true)}
-                disabled={saving}
+                disabled={saving || readOnly}
                 aria-label={`${label}: DM user`}
               />
               <span className="flex items-center gap-1.5 text-sm">
@@ -132,7 +134,7 @@ export function ScenarioSettingsCard({
               <Checkbox
                 checked={setting.deliverVoice}
                 onCheckedChange={(v) => handleChecked("deliver_voice", v === true)}
-                disabled={saving}
+                disabled={saving || readOnly}
                 aria-label={`${label}: voice TTS`}
               />
               <span className="flex items-center gap-1.5 text-sm">
@@ -154,7 +156,7 @@ export function ScenarioSettingsCard({
               value={localCooldown}
               onChange={(e) => setLocalCooldown(e.target.value)}
               onBlur={handleCooldownBlur}
-              disabled={saving}
+              disabled={saving || readOnly}
               className={cn("w-20 font-mono")}
               aria-label={`${label}: cooldown minutes`}
             />

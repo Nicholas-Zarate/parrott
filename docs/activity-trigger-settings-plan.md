@@ -77,6 +77,22 @@ One row per `(guild_id, trigger_type)` (with `guild_id` nullable for defaults). 
 
 So yes: **delivery toggles (channel, DM, voice) per scenario** are the main addition; **enabled** and **cooldown_minutes** in the same table keep “trigger behavior” in one place and allow per-guild overrides later. **config** (jsonb) keeps the table flexible for things like late_night window or long_session threshold without adding columns for every trigger type.
 
+### Editable properties (what the UI / API can change)
+
+All of these can be edited per trigger (and per guild when you add overrides):
+
+| Property | Column | Effect when changed |
+|----------|--------|---------------------|
+| **Channel on/off** | `deliver_channel` | If false, no post to the activity channel for this trigger. |
+| **DM on/off** | `deliver_dm` | If false, no DM for this trigger. |
+| **Voice on/off** | `deliver_voice` | If false, no TTS in VC for this trigger. |
+| **Scenario on/off** | `enabled` | If false, this scenario never fires (no detect → no deliver). |
+| **Cooldown (minutes)** | `cooldown_minutes` | Per-user cooldown for this trigger (e.g. 60, 90, 1440). |
+| **Trigger-specific options** | `config` (jsonb) | e.g. `late_night`: `startHour`, `endHour`; `long_session`: `thresholdMinutes`; `group_gaming`: `minPlayers`; `comeback`: `absenceMinutes`. Detection logic uses these. |
+| **Channel override** (optional) | `channel_name_override` | If set, use this channel name for this trigger instead of the global one. |
+
+So the plan **does** include cooldown and other editable properties in the same table; the agent will read them via a single resolution layer and use them in listener (enabled, cooldown, and optionally config for detection) and deliver (delivery flags and channel override).
+
 ---
 
 ## 4. Other settings worth adding (same table or related)
@@ -136,7 +152,59 @@ So: **DB overrides file.** Within DB: **guild row overrides app-default row.**
 
 ---
 
-## 7. Summary
+## 7. Agent code changes (agent/)
+
+How each file under `agent/` must be adjusted to use the resolved settings (DB + file fallback). Assumes a shared **settings resolver** that returns one object per `(guildId, triggerType)`.
+
+### New module: `agent/activity/settings-resolver.js` (or under `agent/supabase/`)
+
+- **Role:** Single place that fetches/caches and merges settings.
+- **API:** `getResolvedSettings(guildId, triggerType)` → `Promise<ResolvedTriggerSettings>`.
+- **Logic:** Query `activity_trigger_settings` for `(guild_id = guildId, trigger_type = triggerType)`; if none, query `(guild_id = NULL, trigger_type = triggerType)`; if still none, build from `require('../config/activity')` (triggers[triggerType] + globals).
+- **Return shape:** e.g. `{ enabled, cooldownMinutes, deliverChannel, deliverDm, deliverVoice, channelNameOverride?, config? }`. Use same property names as file where possible so callers stay simple.
+- **Caching (optional):** In-memory cache with TTL or invalidation on Supabase write so we don't hit the DB on every event.
+
+### `agent/activity/listener.js`
+
+- **processOneTrigger:** Today it reads `activityConfig.triggers[trigger.triggerType]` for `enabled` and `cooldownMinutes`. Change to: `const resolved = await getResolvedSettings(guild.id, trigger.triggerType)` (or pass `resolved` in from the caller). Use `resolved.enabled` and `resolved.cooldownMinutes`; pass `resolved` (or the delivery subset) into `deliver()` so deliver doesn't need to resolve again.
+- **handlePresenceUpdate:** Before the loop over triggers, you can resolve once per (guild, triggerType) if you want to avoid repeated DB calls for the same trigger type in one batch. Then pass the resolved config into `processOneTrigger` (e.g. `processOneTrigger(client, guild, trigger, displayName, resolved)`).
+- **handleVoiceStateUpdate:** Same idea: resolve for `go_live` (e.g. `getResolvedSettings(guild.id, 'go_live')`) and pass into `processOneTrigger` so enabled/cooldown and deliver use the same resolved object.
+- **detectAll:** Currently receives `activityConfig.triggers`. Option A (simplest for Phase 1): keep passing file config so detection params (startHour, thresholdMinutes, etc.) still come from file; only enabled/cooldown/delivery come from DB. Option B: build a "resolved triggers" map for this guild (one `getResolvedSettings(guild.id, type)` per trigger type), merge each with file config for that type, and pass that into detectAll so detection also uses DB `config` (jsonb) when present. Prefer Option A for first rollout; add Option B when you expose trigger-specific options in the UI.
+
+### `agent/activity/deliver.js`
+
+- **deliver(client, guild, trigger, resolvedSettings):** Add a fourth argument: the resolved settings for this trigger (from listener). If not provided, resolve inside deliver: `const resolved = await getResolvedSettings(guild.id, trigger.triggerType)` (and optionally pass it back to the caller for cooldown/enabled if you ever want deliver to be the only caller).
+- **Channel:** Use `resolvedSettings.deliverChannel !== false` (or explicit `true`) before sending; use `resolvedSettings.channelNameOverride ?? activityConfig.channelName` in `findActivityChannel` when looking up the channel (or add a parameter to `findActivityChannel(guild, channelNameOverride)`).
+- **DM:** Use `resolvedSettings.deliverDm` instead of `activityConfig.dmUser`.
+- **Voice:** Use `resolvedSettings.deliverVoice` instead of `activityConfig.voiceIfConnected`.
+- **findActivityChannel:** Either keep using global `activityConfig.channelName` and add an optional second argument `overrideChannelName`, or pass the resolved "channel name" (override or global) from `deliver` so a single place owns the channel name for this delivery.
+
+### `agent/config/activity.js`
+
+- **No structural change.** Keep as fallback source for the resolver. When a row exists in DB, resolver returns DB values (and merged config from jsonb); when no row, resolver builds from this file. So file remains the default for new triggers and for any field not in the DB.
+
+### `agent/activity/cooldown.js`
+
+- **No change.** It still receives `cooldownMinutes` from the caller. The caller (listener) will get `cooldownMinutes` from `getResolvedSettings(...)` instead of from `activityConfig.triggers[triggerType].cooldownMinutes`.
+
+### `agent/activity/triggers.js`
+
+- **No change in Phase 1** if you use Option A for detectAll (detection still uses file config). If you later use Option B, each detector already receives a `config` object; that object can be the merged result of file + DB `config` jsonb produced by the resolver, so no signature change—only the object passed in comes from the resolver instead of straight from the file.
+
+### Summary of agent changes
+
+| File | Change |
+|------|--------|
+| **New: settings-resolver** | Implement `getResolvedSettings(guildId, triggerType)` (DB → file fallback); return shape includes enabled, cooldownMinutes, deliverChannel, deliverDm, deliverVoice, channelNameOverride, config. |
+| **listener.js** | Resolve settings per (guild, triggerType); use resolved.enabled and resolved.cooldownMinutes in processOneTrigger; pass resolved into deliver(); optionally pass resolved triggers into detectAll later. |
+| **deliver.js** | Accept resolvedSettings; use it for channel/DM/voice toggles and channel name override; keep file config as fallback when resolved is missing (e.g. during rollout). |
+| **config/activity.js** | Unchanged; used as fallback by resolver. |
+| **cooldown.js** | Unchanged; still receives cooldownMinutes from listener. |
+| **triggers.js** | Unchanged in Phase 1; later can receive resolved config for detection params. |
+
+---
+
+## 8. Summary
 
 | Question | Answer |
 |----------|--------|

@@ -13,6 +13,7 @@ const parrotConfig = require('../config/parrot');
 const activityConfig = require('../config/activity');
 const { playInVoiceChannel } = require('../abilities/voice');
 const { logActivityEvent } = require('../supabase/activity-listeners');
+const { getResolvedSettings } = require('./settings-resolver');
 
 const LOG_PREFIX = '[Activity deliver]';
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
@@ -106,10 +107,11 @@ function getFallbackMessage(triggerType, context) {
 /**
  * Find the dedicated activity channel in the guild.
  * @param {import('discord.js').Guild} guild
+ * @param {string|null} [channelNameOverride] - If set, use this instead of config channelName.
  * @returns {import('discord.js').TextChannel|null}
  */
-function findActivityChannel(guild) {
-    const name = activityConfig.channelName;
+function findActivityChannel(guild, channelNameOverride) {
+    const name = channelNameOverride ?? activityConfig.channelName;
     if (!name || !guild?.channels?.cache) return null;
     return guild.channels.cache.find(
         (c) => c.isTextBased() && c.type !== 4 && c.name === name
@@ -118,14 +120,20 @@ function findActivityChannel(guild) {
 
 /**
  * Deliver a triggered activity message to all configured destinations.
+ * Uses resolved settings (per-trigger channel/DM/voice toggles). If resolvedSettings
+ * is omitted, resolves from DB/file so callers can still use deliver(client, guild, trigger).
  *
  * @param {import('discord.js').Client} client
  * @param {import('discord.js').Guild} guild
  * @param {{ triggerType: string, userId: string, activityName?: string, activityType?: number, context: object }} trigger
+ * @param {object} [resolvedSettings] - From getResolvedSettings; when missing, resolved internally.
  * @returns {Promise<void>}
  */
-async function deliver(client, guild, trigger) {
+async function deliver(client, guild, trigger, resolvedSettings) {
     const { triggerType, userId, activityName, activityType, context } = trigger;
+
+    const resolved = resolvedSettings ?? await getResolvedSettings(guild.id, triggerType);
+    const channelName = resolved.channelNameOverride ?? activityConfig.channelName;
 
     // Generate the AI message
     const message = await generateMessage(triggerType, context);
@@ -136,22 +144,26 @@ async function deliver(client, guild, trigger) {
     const displayName = member?.displayName ?? member?.user?.username ?? 'someone';
     const mention = `<@${userId}>`;
 
-    // 1. Send to dedicated channel
-    const channel = findActivityChannel(guild);
-    if (channel) {
-        try {
-            await channel.send(`${mention} ${message}`);
-            deliveredTo.push('channel');
-            console.log(`${LOG_PREFIX} Sent to #${channel.name}`);
-        } catch (err) {
-            console.error(`${LOG_PREFIX} Failed to send to #${channel.name}:`, err.message);
+    // 1. Send to dedicated channel (only if deliverChannel is on)
+    if (resolved.deliverChannel) {
+        const channel = findActivityChannel(guild, resolved.channelNameOverride);
+        if (channel) {
+            try {
+                await channel.send(`${mention} ${message}`);
+                deliveredTo.push('channel');
+                console.log(`${LOG_PREFIX} Sent to #${channel.name}`);
+            } catch (err) {
+                console.error(`${LOG_PREFIX} Failed to send to #${channel.name}:`, err.message);
+            }
+        } else {
+            console.log(`${LOG_PREFIX} No channel "${channelName}" found in guild ${guild.name}. Skipping channel delivery.`);
         }
     } else {
-        console.log(`${LOG_PREFIX} No channel "${activityConfig.channelName}" found in guild ${guild.name}. Skipping channel delivery.`);
+        console.log(`${LOG_PREFIX} Channel delivery disabled for this trigger.`);
     }
 
     // 2. DM the user
-    if (activityConfig.dmUser) {
+    if (resolved.deliverDm) {
         if (member?.user) {
             try {
                 await member.user.send(message);
@@ -164,11 +176,11 @@ async function deliver(client, guild, trigger) {
             console.log(`${LOG_PREFIX} DM skipped — could not resolve member/user for ${userId}.`);
         }
     } else {
-        console.log(`${LOG_PREFIX} DM delivery disabled in config.`);
+        console.log(`${LOG_PREFIX} DM delivery disabled for this trigger.`);
     }
 
-    // 3. Voice TTS (only if user is currently in a voice channel)
-    if (activityConfig.voiceIfConnected && member?.voice?.channel) {
+    // 3. Voice TTS (only if deliverVoice and user is in a voice channel)
+    if (resolved.deliverVoice && member?.voice?.channel) {
         const voiceChannel = member.voice.channel;
         try {
             console.log(`${LOG_PREFIX} Joining VC "${voiceChannel.name}" for TTS`);
@@ -185,11 +197,8 @@ async function deliver(client, guild, trigger) {
         } catch (err) {
             console.error(`${LOG_PREFIX} Voice TTS error:`, err.message || err);
         }
-    }
-
-    // 3b. Voice skipped reasons
-    if (!activityConfig.voiceIfConnected) {
-        console.log(`${LOG_PREFIX} Voice TTS delivery disabled in config.`);
+    } else if (!resolved.deliverVoice) {
+        console.log(`${LOG_PREFIX} Voice TTS delivery disabled for this trigger.`);
     } else if (!member?.voice?.channel) {
         console.log(`${LOG_PREFIX} Voice TTS skipped — ${displayName} is not in a voice channel.`);
     }
