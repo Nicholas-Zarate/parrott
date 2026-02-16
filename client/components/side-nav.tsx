@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useCallback } from "react";
-import { Home, History, Menu, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Home, History, Menu, PanelLeftClose, PanelLeft, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import {
 const navItems = [
   { href: "/", label: "Home", icon: Home },
   { href: "/history", label: "History", icon: History },
+  { href: "/logs", label: "Logs", icon: Terminal },
 ] as const;
 
 /**
