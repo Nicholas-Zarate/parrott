@@ -3,7 +3,7 @@
  * Used by create_timer tool. In-memory only; timers are lost on bot restart.
  */
 
-const { TIMER } = require('../config/constants');
+const { TIMER } = require('../../config/constants');
 const store = require('./store');
 
 const LOG_PREFIX = '[Timer]';

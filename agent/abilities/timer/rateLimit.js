@@ -3,7 +3,7 @@
  * When over limit we do not record (blocked attempts don't extend the window).
  */
 
-const { TIMER } = require('../config/constants');
+const { TIMER } = require('../../config/constants');
 
 /** @type {Map<string, number[]>} userId -> timestamps of create_timer in current window */
 const creationTimestamps = new Map();

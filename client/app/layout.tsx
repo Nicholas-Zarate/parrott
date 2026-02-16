@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { SideNav } from "@/components/side-nav";
+import { DesktopSideNav, MobileNav } from "@/components/side-nav";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -28,8 +28,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased`}
       >
-        <div className="flex min-h-screen">
-          <SideNav />
+        <div className="flex min-h-screen flex-col md:flex-row">
+          <MobileNav />
+          <DesktopSideNav />
           <main className="flex-1 overflow-auto bg-background">
             {children}
           </main>

@@ -6,7 +6,7 @@
 const assert = require('assert');
 const prevDeriveEnv = process.env.TTS_DERIVE_SETTINGS_FROM_TEXT;
 process.env.TTS_DERIVE_SETTINGS_FROM_TEXT = ''; // ensure derivation is on for tests
-const { deriveVoiceSettingsFromText, mergeVoiceSettings } = require('../voice/tts');
+const { deriveVoiceSettingsFromText, mergeVoiceSettings } = require('../abilities/voice/tts');
 
 const derive = deriveVoiceSettingsFromText;
 

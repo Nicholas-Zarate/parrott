@@ -1,10 +1,10 @@
 const { isChannelAllowed, getChannelTier } = require('./config');
 const { buildUserContentForParrot, getPreviousTurnForParrot, isBotMentionedInContent } = require('./format');
 const { checkAndRecord, getRetryAfterSeconds, plural } = require('./rateLimit');
-const parrotConfig = require('../config/parrot');
-const { getOpenAIErrorMessage } = require('../commands/roast/openai');
-const { chatWithTools } = require('../ai-sdk/with-tools');
-const { saveConversation, getToolsCalledFromSteps } = require('../supabase/conversation-history');
+const parrotConfig = require('../../config/parrot');
+const { getOpenAIErrorMessage } = require('../../commands/roast/openai');
+const { chatWithTools } = require('../../ai-sdk/with-tools');
+const { saveConversation, getToolsCalledFromSteps } = require('../../supabase/conversation-history');
 
 /**
  * Runs when someone mentions the bot in an allowed channel.

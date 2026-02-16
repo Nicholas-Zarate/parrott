@@ -1,11 +1,15 @@
 require('dotenv').config();
+const { patchConsole } = require('./supabase/logs');
+patchConsole();
+
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const poll = require('./commands/poll');
 const analysis = require('./analysis');
 const roast = require('./commands/roast');
-const mention = require('./mention');
-const { isBotMentionedInContent } = require('./mention/format');
+const mention = require('./abilities/mention');
+const { isBotMentionedInContent } = require('./abilities/mention/format');
 const { startScheduler } = require('./jobs/scheduler');
+const { handlePresenceUpdate, init: initActivityListener } = require('./activity/listener');
 
 /** Discord permission integer for the bot invite URL (OAuth2). Override with INVITE_PERMISSIONS in .env if needed. Voice (squawk) needs Connect + Speak; re-invite with permissions that include those if the bot cannot join VC. */
 const INVITE_PERMISSIONS = process.env.INVITE_PERMISSIONS || '562955322199104';
@@ -62,6 +66,9 @@ client.on('ready', async () => {
 
     // Start periodic jobs (announcements every 6h). Safe to call once.
     startScheduler();
+
+    // Initialize activity listener (presenceUpdate triggers).
+    initActivityListener();
 });
 
 // If MENTION_DEBUG_GATEWAY=1, log raw MESSAGE_CREATE from Discord. If you see [Gateway RAW] but no [Debug] messageCreate, the client dropped the event (e.g. channel not resolved).
@@ -122,6 +129,12 @@ client.on('messageCreate', async (message) => {
     const authorLabel = message.author?.username ?? message.author?.id ?? '?';
     console.log(`[Debug] messageCreate #${chName ?? '?'} @${authorLabel} | mentions (API): ${mentionCount} | bot mentioned: ${botMentioned}`);
     mention.handleMention(message, client);
+});
+
+client.on('presenceUpdate', (oldPresence, newPresence) => {
+    handlePresenceUpdate(oldPresence, newPresence, client).catch((err) => {
+        console.error('[presenceUpdate] Unhandled error:', err.message || err);
+    });
 });
 
 client.on('interactionCreate', async interaction => {

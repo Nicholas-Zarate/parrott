@@ -18,10 +18,10 @@ const { formatUserDataForLLM } = require('../commands/roast/format');
 const { collectUserDataForRoast } = require('../commands/roast/collect');
 const { createHearingPollInChannel } = require('../commands/poll/create');
 const { TIMER } = require('../config/constants');
-const { scheduleTimer } = require('../timer');
-const { check: checkTimerCreationLimit, record: recordTimerCreation } = require('../timer/rateLimit');
-const { playInVoiceChannel } = require('../voice');
-const { generateHollaResponse, FALLBACK_PHRASE } = require('../voice/holla');
+const { scheduleTimer } = require('../abilities/timer');
+const { check: checkTimerCreationLimit, record: recordTimerCreation } = require('../abilities/timer/rateLimit');
+const { playInVoiceChannel } = require('../abilities/voice');
+const { generateHollaResponse, FALLBACK_PHRASE } = require('../abilities/voice/holla');
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
 const LOG_PREFIX = '[Parrott tools]';
