@@ -5,6 +5,8 @@
 
 const { TIMER } = require('../../config/constants');
 const store = require('./store');
+const { hasBlockedRole } = require('../restricted-roles');
+const { getAllowActivityDm } = require('../../supabase/user-dm-preferences');
 
 const LOG_PREFIX = '[Timer]';
 
@@ -38,6 +40,20 @@ async function fireTimer(client, timerId) {
                 console.log(`${LOG_PREFIX} channel ${channelId} not found or not sendable`);
             }
         } else {
+            const allowedByPreference = await getAllowActivityDm(userId);
+            if (!allowedByPreference) {
+                console.log(`${LOG_PREFIX} DM skipped — user ${userId} opted out of DMs.`);
+                return;
+            }
+            const guildId = entry.guildId;
+            if (guildId) {
+                const guild = await client.guilds.fetch(guildId).catch(() => null);
+                const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
+                if (member && hasBlockedRole(member)) {
+                    console.log(`${LOG_PREFIX} DM skipped — user ${userId} has a restricted role in guild.`);
+                    return;
+                }
+            }
             const user = await client.users.fetch(userId).catch(() => null);
             if (user?.send) {
                 await user.send(`${body}`);

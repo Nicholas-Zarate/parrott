@@ -1,6 +1,7 @@
 const { isChannelAllowed, getChannelTier } = require('./config');
 const { buildUserContentForParrot, getPreviousTurnForParrot, isBotMentionedInContent } = require('./format');
 const { checkAndRecord, getRetryAfterSeconds, plural } = require('./rateLimit');
+const { hasBlockedRole } = require('../restricted-roles');
 const parrotConfig = require('../../config/parrot');
 const { getOpenAIErrorMessage } = require('../../commands/roast/openai');
 const { chatWithTools } = require('../../ai-sdk/with-tools');
@@ -20,6 +21,16 @@ async function onMention(message, client) {
     const channelName = message.channel?.name ?? 'dm';
     const authorTag = message.author?.tag ?? message.author?.id ?? 'unknown';
     console.log(`[Mention] #${channelName} @${authorTag}: ${message.content ?? '(no content)'}`);
+
+    // Blocked Discord roles (e.g. Wanderer): polite rejection, no LLM/tools
+    if (message.guild) {
+        const member = message.member ?? await message.guild.members.fetch(message.author?.id).catch(() => null);
+        if (member && hasBlockedRole(member)) {
+            const reply = "only full members can use the parrot here, no cap.";
+            await message.reply(reply).catch(() => null);
+            return;
+        }
+    }
 
     const tier = getChannelTier(message.channel);
     const userId = message.author?.id;

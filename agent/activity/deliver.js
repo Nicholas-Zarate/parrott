@@ -14,6 +14,8 @@ const activityConfig = require('../config/activity');
 const { playInVoiceChannel } = require('../abilities/voice');
 const { logActivityEvent } = require('../supabase/activity-listeners');
 const { getResolvedSettings } = require('./settings-resolver');
+const { hasBlockedRole } = require('../abilities/restricted-roles');
+const { getAllowActivityDm } = require('../supabase/user-dm-preferences');
 
 const LOG_PREFIX = '[Activity deliver]';
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
@@ -162,15 +164,23 @@ async function deliver(client, guild, trigger, resolvedSettings) {
         console.log(`${LOG_PREFIX} Channel delivery disabled for this trigger.`);
     }
 
-    // 2. DM the user
+    // 2. DM the user (skip if blocked role or user opted out)
     if (resolved.deliverDm) {
         if (member?.user) {
-            try {
-                await member.user.send(message);
-                deliveredTo.push('dm');
-                console.log(`${LOG_PREFIX} DM sent to ${displayName}.`);
-            } catch (err) {
-                console.log(`${LOG_PREFIX} Could not DM ${displayName}: ${err.message} (user may have DMs disabled).`);
+            const blockedByRole = hasBlockedRole(member);
+            const allowedByPreference = await getAllowActivityDm(userId);
+            if (blockedByRole) {
+                console.log(`${LOG_PREFIX} DM skipped — ${displayName} has a restricted role.`);
+            } else if (!allowedByPreference) {
+                console.log(`${LOG_PREFIX} DM skipped — ${displayName} opted out of activity DMs.`);
+            } else {
+                try {
+                    await member.user.send(message);
+                    deliveredTo.push('dm');
+                    console.log(`${LOG_PREFIX} DM sent to ${displayName}.`);
+                } catch (err) {
+                    console.log(`${LOG_PREFIX} Could not DM ${displayName}: ${err.message} (user may have DMs disabled).`);
+                }
             }
         } else {
             console.log(`${LOG_PREFIX} DM skipped — could not resolve member/user for ${userId}.`);

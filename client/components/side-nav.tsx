@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Settings,
   Users,
+  User,
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -176,6 +177,32 @@ function NavLinks({
           </li>
         );
       })}
+
+      {/* Authenticated users: User (preferences) */}
+      {perms.authenticated && (
+        <>
+          {!collapsed && (
+            <div className="my-2 mx-2 border-t border-sidebar-border" />
+          )}
+          <li>
+            <Link
+              href="/user"
+              onClick={onNavigate}
+              title="User"
+              className={cn(
+                "flex items-center rounded-md text-sm font-medium transition-colors",
+                collapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2",
+                pathname.startsWith("/user")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              )}
+            >
+              <User className="size-4 shrink-0" aria-hidden />
+              {!collapsed && <span>User</span>}
+            </Link>
+          </li>
+        </>
+      )}
 
       {/* Admin-only: Settings section */}
       {perms.isAdmin && (
