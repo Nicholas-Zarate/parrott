@@ -78,7 +78,7 @@ async function onMention(message, client) {
     try {
         const { text, steps } = await chatWithTools(messages, { message, client }, {
             model: parrotConfig.model,
-            maxTokens: Math.max(parrotConfig.max_completion_tokens ?? 150, 250)
+            maxTokens: Math.max(parrotConfig.max_completion_tokens ?? 150, 400)
         });
         const finalContent = text?.trim() || 'SQUAWK.';
         await replyMsg.edit(finalContent);
