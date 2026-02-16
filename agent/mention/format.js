@@ -110,25 +110,64 @@ function formatMessageForParrot(message, botUser = null) {
     return `User @${displayName} in #${channelName} wrote: "${content}"`;
 }
 
+/** Max names in "online now" block; avoids huge context. */
+const ONLINE_NOW_MAX_NAMES = 30;
+/** Max chars for the online-now line. */
+const ONLINE_NOW_MAX_CHARS = 600;
+
 /**
- * Build the full user content sent to the parrot: optional "recent messages above" block + current message.
- * Single place for "what we send as the user message" so the model can refer to "the message above".
+ * Build a short "who is online now" line from the guild (requires GuildPresences + GuildMembers).
+ * Status online/idle/dnd count as "online"; offline or no presence excluded. Excludes the bot.
+ *
+ * @param {import('discord.js').Guild} guild
+ * @param {import('discord.js').User} [botUser] - Exclude this bot from the list
+ * @returns {string} e.g. "Online now (this server): Alice, Bob, …" or ""
+ */
+function getOnlineNowForParrot(guild, botUser = null) {
+    if (!guild?.members?.cache) return '';
+    const names = [];
+    let totalChars = 0;
+    const statusOk = (s) => s === 'online' || s === 'idle' || s === 'dnd';
+    for (const [, member] of guild.members.cache) {
+        if (names.length >= ONLINE_NOW_MAX_NAMES || totalChars >= ONLINE_NOW_MAX_CHARS) break;
+        if (botUser && member.user?.id === botUser.id) continue;
+        const status = member.presence?.status;
+        if (!statusOk(status)) continue;
+        const name = member.displayName ?? member.user?.username ?? member.user?.tag ?? 'Someone';
+        const len = name.length + (names.length ? 2 : 0);
+        if (totalChars + len > ONLINE_NOW_MAX_CHARS) break;
+        names.push(name);
+        totalChars += len;
+    }
+    if (names.length === 0) return '';
+    return `Online now (this server): ${names.join(', ')}`;
+}
+
+/**
+ * Build the full user content sent to the parrot: optional "online now" + optional "recent messages above" + current message.
+ * Single place for "what we send as the user message" so the model can refer to "the message above" or "who's online".
  *
  * @param {import('discord.js').Message} message - The message that mentioned the bot
- * @param {import('discord.js').User} [botUser] - Bot user (strip mention, label in recent block)
+ * @param {import('discord.js').User} [botUser] - Bot user (strip mention, label in recent block, exclude from online list)
  * @returns {Promise<string>}
  */
 async function buildUserContentForParrot(message, botUser = null) {
     const userContext = formatMessageForParrot(message, botUser);
+    const parts = [];
+    if (message.guild) {
+        const onlineLine = getOnlineNowForParrot(message.guild, botUser);
+        if (onlineLine) parts.push(onlineLine);
+    }
     const recentBlock = await getRecentMessagesAboveForParrot(message, botUser);
-    return recentBlock
-        ? `Recent messages above (newest first):\n${recentBlock}\n\n${userContext}`
-        : userContext;
+    if (recentBlock) parts.push(`Recent messages above (newest first):\n${recentBlock}`);
+    parts.push(userContext);
+    return parts.join('\n\n');
 }
 
 module.exports = {
     formatMessageForParrot,
     getRecentMessagesAboveForParrot,
+    getOnlineNowForParrot,
     buildUserContentForParrot,
     isBotMentionedInContent,
     MAX_MESSAGE_CONTENT_LENGTH,

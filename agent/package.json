@@ -4,7 +4,8 @@
   "description": "Discord voting bot with multiple poll types",
   "main": "discord-voting-bot.js",
   "scripts": {
-    "start": "node discord-voting-bot.js"
+    "start": "node discord-voting-bot.js",
+    "test": "node test/vc-tone.test.js"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.0.0",

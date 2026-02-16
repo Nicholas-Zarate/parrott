@@ -54,6 +54,10 @@ client.on('ready', async () => {
     } catch (error) {
         console.error('Error registering commands:', error);
     }
+    const parrotConfig = require('./config/parrot');
+    if (process.env.PARROT_TONES_SOURCE?.trim()?.toLowerCase() === 'supabase') {
+        await parrotConfig.refreshTonesCache();
+    }
 });
 
 // If MENTION_DEBUG_GATEWAY=1, log raw MESSAGE_CREATE from Discord. If you see [Gateway RAW] but no [Debug] messageCreate, the client dropped the event (e.g. channel not resolved).

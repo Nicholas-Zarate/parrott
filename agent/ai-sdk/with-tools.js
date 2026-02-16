@@ -12,6 +12,7 @@ const { openai } = require('@ai-sdk/openai');
 const z = require('zod');
 
 const roastConfig = require('../config/roast');
+const parrotConfig = require('../config/parrot');
 const { requestRoast, getOpenAIErrorMessage } = require('../commands/roast/openai');
 const { formatUserDataForLLM } = require('../commands/roast/format');
 const { collectUserDataForRoast } = require('../commands/roast/collect');
@@ -38,6 +39,8 @@ const SEARCH_SNIPPET_MAX_LEN = 400;
  */
 function buildTools(context = {}) {
     const { message, client } = context;
+    const vcMax = Math.max(1, Math.min(10, parrotConfig.getTones().vc?.maxWords ?? 3));
+    const vcWordLabel = vcMax <= 2 ? `${vcMax} words` : `2–${vcMax} words`;
 
     return {
         run_roast: tool({
@@ -323,9 +326,9 @@ function buildTools(context = {}) {
         }),
 
         join_voice_and_squawk: tool({
-            description: 'Join the user\'s voice channel and speak via text-to-speech, then leave. Use this (NOT echo) whenever the user says "say" followed by words—e.g. "say hello", "say we won", "parrott say X", "say: X". Put everything that comes AFTER "say" (or "say:") into customMessage; that exact text will be spoken in voice. For "say hello world", customMessage is "hello world". For squawk/holla/say something in VC without a specific phrase, pass empty string and the bot will roast the game people are playing. They must be in a voice channel. Max 200 characters for customMessage.',
+            description: `Join the user's voice channel and speak via text-to-speech, then leave. In VC the parrot only speaks ${vcWordLabel} (hood style or yes/no). Use this (NOT echo) when the user says "say" followed by words—e.g. "say yo", "say nah". Put what comes after "say" into customMessage; keep it to ${vcMax} words or fewer. For squawk/holla without a phrase, pass empty customMessage for game roast. They must be in a voice channel. Spoken output is capped at ${vcMax} words.`,
             parameters: z.object({
-                customMessage: z.string().describe('The words to speak in voice: everything the user said after "say" or "say:". E.g. user says "say hello everyone" → pass "hello everyone". Pass empty string only when they did NOT ask you to say something specific (then game roast is used).'),
+                customMessage: z.string().describe(`The ${vcMax} words or fewer to speak in voice (hood or yes/no). E.g. "say yo" → "yo". "say we won" → "we won". Pass empty string only when they did NOT ask for specific words (then game roast is used).`),
             }),
             execute: async ({ customMessage }) => {
                 const channelName = message?.channel?.name ?? 'dm';
@@ -357,26 +360,31 @@ function buildTools(context = {}) {
                     };
                 }
 
-                const MAX_CUSTOM_LEN = 200;
                 const custom = typeof customMessage === 'string' ? customMessage.trim() : '';
                 let textToSpeak;
                 if (custom.length > 0) {
-                    if (custom.length > MAX_CUSTOM_LEN) {
-                        return {
-                            success: false,
-                            error: `Message too long (max ${MAX_CUSTOM_LEN} characters).`,
-                            hint: 'Tell the user to keep it shorter.',
-                        };
+                    const words = custom.split(/\s+/).filter(Boolean);
+                    textToSpeak = words.slice(0, vcMax).join(' ');
+                    if (words.length > vcMax) {
+                        console.log(`${LOG_PREFIX} join_voice_and_squawk truncated to ${vcMax} words for VC`);
                     }
-                    textToSpeak = custom;
-                    console.log(`${LOG_PREFIX} join_voice_and_squawk custom say: "${textToSpeak.slice(0, 50)}${textToSpeak.length > 50 ? '…' : ''}"`);
+                    console.log(`${LOG_PREFIX} join_voice_and_squawk custom say: "${textToSpeak}"`);
                 } else {
                     const game = getMostCommonGameInVoiceChannel(voiceChannel, client.user?.id);
                     console.log(`${LOG_PREFIX} join_voice_and_squawk game in VC: ${game ?? 'none'}`);
-                    textToSpeak = await generateGameRoast(game || '');
+                    const fullRoast = await generateGameRoast(game || '');
+                    const words = String(fullRoast).trim().split(/\s+/).filter(Boolean);
+                    textToSpeak = words.slice(0, vcMax).join(' ') || fullRoast;
+                    if (words.length > vcMax) {
+                        console.log(`${LOG_PREFIX} join_voice_and_squawk game roast truncated to ${vcMax} words for VC`);
+                    }
                 }
                 if (!textToSpeak || !String(textToSpeak).trim()) {
                     textToSpeak = FALLBACK_PHRASE;
+                }
+                const words = String(textToSpeak).trim().split(/\s+/).filter(Boolean);
+                if (words.length > vcMax) {
+                    textToSpeak = words.slice(0, vcMax).join(' ');
                 }
 
                 console.log(`${LOG_PREFIX} join_voice_and_squawk joining VC "${voiceChannel.name}" for @${authorTag}`);
