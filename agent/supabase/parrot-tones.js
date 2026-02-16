@@ -4,16 +4,9 @@
  * Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY).
  */
 
-const { createClient } = require('@supabase/supabase-js');
+const { getClient } = require('./client');
 
 const TABLE = 'parrot_tones';
-
-function getClient() {
-    const url = process.env.SUPABASE_URL?.trim();
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-    if (!url || !key) return null;
-    return createClient(url, key);
-}
 
 /**
  * Fetch active tones from Supabase and return { text: { task, constraints, maxWords }, vc: { ... }, ... } keyed by slug.

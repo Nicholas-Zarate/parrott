@@ -5,6 +5,7 @@ const analysis = require('./analysis');
 const roast = require('./commands/roast');
 const mention = require('./mention');
 const { isBotMentionedInContent } = require('./mention/format');
+const { startScheduler } = require('./jobs/scheduler');
 
 /** Discord permission integer for the bot invite URL (OAuth2). Override with INVITE_PERMISSIONS in .env if needed. Voice (squawk) needs Connect + Speak; re-invite with permissions that include those if the bot cannot join VC. */
 const INVITE_PERMISSIONS = process.env.INVITE_PERMISSIONS || '562955322199104';
@@ -58,6 +59,9 @@ client.on('ready', async () => {
     if (process.env.PARROT_TONES_SOURCE?.trim()?.toLowerCase() === 'supabase') {
         await parrotConfig.refreshTonesCache();
     }
+
+    // Start periodic jobs (announcements every 6h). Safe to call once.
+    startScheduler();
 });
 
 // If MENTION_DEBUG_GATEWAY=1, log raw MESSAGE_CREATE from Discord. If you see [Gateway RAW] but no [Debug] messageCreate, the client dropped the event (e.g. channel not resolved).
