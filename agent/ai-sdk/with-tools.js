@@ -324,7 +324,7 @@ function buildTools(context = {}) {
         }),
 
         join_voice_and_squawk: tool({
-            description: 'Join the user\'s voice channel and speak via text-to-speech, then leave. Use only for: (1) "holla at me" — pass empty customMessage; a short greeting (or occasionally a game-based line) is generated and spoken. (2) "say <phrase>" — pass the phrase in customMessage; that phrase is spoken. They must be in a voice channel. If you previously offered an alternative phrase (e.g. a neutral version) and the user agrees (e.g. says "yes"), call this tool with that phrase in customMessage. Do NOT use for echo/repeat (use echo tool for that).',
+            description: 'Join the user\'s voice channel and speak via text-to-speech, then leave. Use for: (1) "holla at me" — pass empty customMessage; a short greeting (or occasionally a game-based line) is generated and spoken. (2) "say <phrase>" — pass the phrase in customMessage; that phrase is spoken. (3) When the user asks you to respond in voice chat / say it in VC / speak in voice — generate your response first, then pass it as customMessage so it is spoken. They must be in a voice channel. If you previously offered an alternative phrase (e.g. a neutral version) and the user agrees (e.g. says "yes"), call this tool with that phrase in customMessage. Do NOT use for echo/repeat (use echo tool for that).',
             parameters: z.object({
                 customMessage: z.string().describe('For "say <phrase>": the phrase to speak (e.g. "say we won" → "we won"). For "holla at me": pass empty string so a greeting or game line is generated.'),
             }),
