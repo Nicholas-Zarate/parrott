@@ -4,6 +4,7 @@
  */
 
 const { getClient } = require('./client');
+const { getLogger } = require('./logs');
 
 const TABLE = 'parrot_announcements';
 
@@ -43,6 +44,14 @@ async function insertAnnouncement(row) {
         console.error('[Announcements] Supabase insert error:', error.message);
         return { ok: false, error: error.message };
     }
+    getLogger('audit').info(`DB audit: parrot_announcements insert | period ${record.period_start} → ${record.period_end} rundown ${record.rundown_text.length} chars`, {
+        type: 'db_audit',
+        table: TABLE,
+        operation: 'insert',
+        period_start: record.period_start,
+        period_end: record.period_end,
+        rundown_length: record.rundown_text.length,
+    });
     return { ok: true };
 }
 

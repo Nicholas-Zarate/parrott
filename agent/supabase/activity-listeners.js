@@ -4,6 +4,7 @@
  */
 
 const { getClient } = require('./client');
+const { getLogger } = require('./logs');
 
 const TABLE = 'activity_listeners';
 
@@ -53,6 +54,14 @@ async function logActivityEvent(row) {
         console.error('[ActivityDB] Insert error:', error.message);
         return { ok: false, error: error.message };
     }
+    getLogger('audit').info(`DB audit: activity_listeners insert | trigger=${record.trigger_type} user=${record.user_id} delivered_to=[${(record.delivered_to || []).join(', ')}]`, {
+        type: 'db_audit',
+        table: TABLE,
+        operation: 'insert',
+        trigger_type: record.trigger_type,
+        user_id: record.user_id,
+        delivered_to: record.delivered_to,
+    });
     return { ok: true };
 }
 

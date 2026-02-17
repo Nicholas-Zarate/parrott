@@ -4,6 +4,7 @@
  */
 
 import { createClient } from "@/lib/supabase/client";
+import { logDbAudit } from "@/lib/audit-log";
 
 const TABLE = "parrot_roast_config";
 
@@ -49,17 +50,25 @@ export async function fetchRoastConfig(): Promise<RoastConfig> {
   return out;
 }
 
+export type UpdateRoastConfigOptions = {
+  /** When provided, a db_audit log is written for changed keys. */
+  previousConfig?: Partial<RoastConfig> | null;
+};
+
 /**
  * Update roast config in Supabase. Caller must be admin (RLS enforces).
  * Weights are not auto-normalized; UI should ensure they sum to 100.
+ * When options.previousConfig is provided, logs a db_audit entry after success.
  */
 export async function updateRoastConfig(
-  config: Partial<RoastConfig>
+  config: Partial<RoastConfig>,
+  options?: UpdateRoastConfigOptions
 ): Promise<{ error: string | null }> {
   const supabase = createClient();
   const now = new Date().toISOString();
 
-  const updates: Promise<{ error: string | null }>[] = [];
+  type Result = { error: string | null };
+  const updates: Promise<Result>[] = [];
 
   if (config.weight_messages != null) {
     updates.push(
@@ -67,7 +76,7 @@ export async function updateRoastConfig(
         .from(TABLE)
         .update({ value_int: Math.max(0, Math.min(100, config.weight_messages)), updated_at: now })
         .eq("key", "roast_weight_messages")
-        .then((r) => ({ error: r.error?.message ?? null }))
+        .then((r) => ({ error: r.error?.message ?? null })) as Promise<Result>
     );
   }
   if (config.weight_game_streak != null) {
@@ -76,7 +85,7 @@ export async function updateRoastConfig(
         .from(TABLE)
         .update({ value_int: Math.max(0, Math.min(100, config.weight_game_streak)), updated_at: now })
         .eq("key", "roast_weight_game_streak")
-        .then((r) => ({ error: r.error?.message ?? null }))
+        .then((r) => ({ error: r.error?.message ?? null })) as Promise<Result>
     );
   }
   if (config.weight_custom != null) {
@@ -85,7 +94,7 @@ export async function updateRoastConfig(
         .from(TABLE)
         .update({ value_int: Math.max(0, Math.min(100, config.weight_custom)), updated_at: now })
         .eq("key", "roast_weight_custom")
-        .then((r) => ({ error: r.error?.message ?? null }))
+        .then((r) => ({ error: r.error?.message ?? null })) as Promise<Result>
     );
   }
   if (config.game_streak_min_activities != null) {
@@ -97,12 +106,37 @@ export async function updateRoastConfig(
           updated_at: now,
         })
         .eq("key", "roast_game_streak_min_activities")
-        .then((r) => ({ error: r.error?.message ?? null }))
+        .then((r) => ({ error: r.error?.message ?? null })) as Promise<Result>
     );
   }
 
   if (updates.length === 0) return { error: null };
   const results = await Promise.all(updates);
   const firstError = results.find((r) => r.error);
-  return { error: firstError?.error ?? null };
+  if (firstError?.error) return { error: firstError.error };
+
+  const prev = options?.previousConfig;
+  if (prev != null && Object.keys(config).length > 0) {
+    const changes: Record<string, { old: unknown; new: unknown }> = {};
+    if (config.weight_messages != null)
+      changes.weight_messages = { old: prev.weight_messages, new: config.weight_messages };
+    if (config.weight_game_streak != null)
+      changes.weight_game_streak = { old: prev.weight_game_streak, new: config.weight_game_streak };
+    if (config.weight_custom != null)
+      changes.weight_custom = { old: prev.weight_custom, new: config.weight_custom };
+    if (config.game_streak_min_activities != null)
+      changes.game_streak_min_activities = {
+        old: prev.game_streak_min_activities,
+        new: config.game_streak_min_activities,
+      };
+    if (Object.keys(changes).length > 0) {
+      logDbAudit({
+        table: TABLE,
+        operation: "update",
+        scopeOrId: "roast_config",
+        changes,
+      });
+    }
+  }
+  return { error: null };
 }

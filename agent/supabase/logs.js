@@ -131,9 +131,66 @@ const log = {
     },
 };
 
+/** @type {Map<string, { info: Function, warn: Function, error: Function, debug: Function }>} */
+const loggerCache = new Map();
+
+/**
+ * Create a logger bound to a module name. Messages are prefixed with [moduleName] and meta includes module.
+ * Uses same fire-and-forget Supabase and originalConsole as the global log; never throws.
+ * @param {string} moduleName - e.g. 'mention', 'activity-deliver', 'audit'
+ * @returns {{ info: Function, warn: Function, error: Function, debug: Function }}
+ */
+function createLogger(moduleName) {
+    const prefix = typeof moduleName === 'string' && moduleName ? `[${moduleName}] ` : '';
+    const out = {
+        info(message, meta = null) {
+            const msg = typeof message === 'string' ? message : util.inspect(message);
+            const line = prefix + msg;
+            if (originalConsole) originalConsole.log(line); else console.log(line);
+            const merged = meta && typeof meta === 'object' ? { module: moduleName, ...meta } : { module: moduleName };
+            sendToSupabase('info', line, merged);
+        },
+        warn(message, meta = null) {
+            const msg = typeof message === 'string' ? message : util.inspect(message);
+            const line = prefix + msg;
+            if (originalConsole) originalConsole.warn(line); else console.warn(line);
+            const merged = meta && typeof meta === 'object' ? { module: moduleName, ...meta } : { module: moduleName };
+            sendToSupabase('warn', line, merged);
+        },
+        error(message, meta = null) {
+            const msg = typeof message === 'string' ? message : util.inspect(message);
+            const line = prefix + msg;
+            if (originalConsole) originalConsole.error(line); else console.error(line);
+            const merged = meta && typeof meta === 'object' ? { module: moduleName, ...meta } : { module: moduleName };
+            sendToSupabase('error', line, merged);
+        },
+        debug(message, meta = null) {
+            const msg = typeof message === 'string' ? message : util.inspect(message);
+            const line = prefix + msg;
+            if (originalConsole) originalConsole.debug(line); else console.debug(line);
+            const merged = meta && typeof meta === 'object' ? { module: moduleName, ...meta } : { module: moduleName };
+            sendToSupabase('debug', line, merged);
+        },
+    };
+    return out;
+}
+
+/**
+ * Return a cached logger for the given module name. Same API as createLogger.
+ * @param {string} moduleName
+ * @returns {{ info: Function, warn: Function, error: Function, debug: Function }}
+ */
+function getLogger(moduleName) {
+    const key = typeof moduleName === 'string' ? moduleName : 'app';
+    if (!loggerCache.has(key)) loggerCache.set(key, createLogger(key));
+    return loggerCache.get(key);
+}
+
 module.exports = {
     insertLog,
     patchConsole,
     log,
     formatArgs,
+    createLogger,
+    getLogger,
 };
