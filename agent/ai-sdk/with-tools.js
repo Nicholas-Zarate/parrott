@@ -38,7 +38,7 @@ const SEARCH_SNIPPET_MAX_LEN = 400;
  * @returns {Object} tools map for generateText
  */
 const DEFAULT_TOOL_DESCRIPTIONS = {
-    run_roast: 'Generate a short roast for a Discord user based on their recent messages. Use when the user asks to roast someone or to "roast @user". Requires the target Discord user ID. Uses last 7 days and server scope by default.',
+    run_roast: 'Generate a short roast for a Discord user based on their recent messages. Use when the user asks to roast someone or to "roast @user", or when they confirm (e.g. "yes") after you offered to roast. When the user @mentions someone (or confirmed roasting them), the user message or a previous user message in the conversation will include a line "Mentioned users in this message: @Name (id NUMBER)"—use that NUMBER as targetUserId. Do not ask the user for the ID when it appears in that line. Uses last 7 days and server scope by default.',
     search_web: 'Search the web for current information, facts, or research. Use when the user asks to look something up, research a topic, get recent news, find facts, says "find out" (e.g. find out about X), or "search online". Also use when they ask for technical implementations, technical or performance upgrades, how to improve or beat something (e.g. "how would you beat X", "what would you add to yourself", "what technical implementations"), or comparisons to other products/people—search first, then answer from the results. Returns titles, URLs, and short snippets.',
     create_hearing_poll: 'Create a hearing poll (like /vote_hearing): anyone can add options then vote. Use when the user says: create a hearing poll, vote_hearing, vote hearing, run a hearing, do a hearing, or "poll where people can add options". Pass question (required), duration in minutes (use 0 for no limit), and anonymous (false for public votes).',
     create_timer: 'Set a timer or reminder. Use when the user says: remind me, remind me in X minutes, set a timer for X, make a timer for X, etc. Pass durationMinutes (1–1440) when the user gave a time; pass 0 when they did NOT say how long (tool will tell you to ask) or when isPopeyesTimer is true. If the user says it\'s a Popeyes timer (or says yes when you ask "This a Popeyes timer?"), pass isPopeyesTimer true and durationMinutes 0—the tool will use 10 min + random 2–15 min. Optional reminder text; replyInChannel true to post in channel when it fires, false to DM.',
@@ -441,6 +441,7 @@ function buildTools(context = {}) {
  */
 async function chatWithTools(messages, context = {}, options = {}) {
     const modelId = options.model ?? DEFAULT_MODEL;
+    console.log(`${LOG_PREFIX} chatWithTools using model "${modelId}"`);
     const model = getModel(modelId);
     const tools = buildTools(context);
     const maxTokens = options.maxTokens ?? roastConfig.max_completion_tokens ?? 256;
