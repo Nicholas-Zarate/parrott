@@ -7,13 +7,12 @@
  */
 
 const { generateText } = require('ai');
-const { getModel } = require('../ai-sdk/model-provider');
+const { getModel, DEFAULT_MODEL } = require('../ai-sdk/model-provider');
 const parrotConfig = require('../config/parrot');
 const { getConversationsForPeriod } = require('../supabase/conversation-history');
 const { insertAnnouncement } = require('../supabase/announcements');
 
 const LOG = '[Announcement job]';
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'claude-sonnet-4-5';
 const WINDOW_HOURS = Number(process.env.ANNOUNCEMENT_WINDOW_HOURS) || 6;
 const MAX_ROWS = 100;
 const MAX_CONTEXT_CHARS = 6000;

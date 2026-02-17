@@ -5,7 +5,7 @@
  *   - else      → OpenAI
  * Env: OPENAI_API_KEY (OpenAI), ANTHROPIC_API_KEY (Claude), XAI_API_KEY (Grok).
  *
- * @param {string} [modelId] - e.g. 'gpt-4o', 'claude-sonnet-4-5', 'grok-3'. Defaults to OPENAI_MODEL or 'claude-sonnet-4-5'.
+ * @param {string} [modelId] - e.g. 'gpt-4o', 'claude-sonnet-4-5', 'grok-3'. Defaults to OPENAI_MODEL or 'grok-4-1-fast-non-reasoning'.
  * @returns {import('ai').LanguageModel}
  * @throws {Error} With code NO_OPENAI_API_KEY, NO_ANTHROPIC_API_KEY, or NO_XAI_API_KEY when the chosen provider's key is missing.
  */
@@ -14,10 +14,8 @@ const { openai } = require('@ai-sdk/openai');
 const { anthropic } = require('@ai-sdk/anthropic');
 const { xai } = require('@ai-sdk/xai');
 
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'claude-sonnet-4-5';
-
-/** Incremented on each getModel() call; used to log current model every 3 calls. */
-let getModelCallCount = 0;
+/** Single source of truth for default model. Override with OPENAI_MODEL env if needed. */
+const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'grok-4-1-fast-non-reasoning';
 
 /** Explicit match: Anthropic Claude model ids start with or contain "claude-" (e.g. claude-sonnet-4-5). */
 function isClaudeModel(modelId) {
@@ -33,11 +31,7 @@ function isGrokModel(modelId) {
 
 function getModel(modelId) {
     const resolved = (modelId && String(modelId).trim()) || DEFAULT_MODEL;
-
-    getModelCallCount += 1;
-    if (getModelCallCount % 3 === 1) {
-        console.log('[Model] current model (every 3rd call):', resolved);
-    }
+    console.log('[Model] current model:', resolved);
 
     if (isClaudeModel(resolved)) {
         const apiKey = process.env.ANTHROPIC_API_KEY?.trim();

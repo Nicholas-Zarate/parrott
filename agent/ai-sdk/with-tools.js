@@ -4,11 +4,11 @@
  * trigger roasts, analysis, polls, research, etc. via tool calls.
  *
  * Requires: ai, @ai-sdk/openai, @ai-sdk/anthropic, zod
- * Env: OPENAI_API_KEY (OpenAI models) or ANTHROPIC_API_KEY (Claude models). Optional: OPENAI_MODEL (overrides default). Default model: claude-sonnet-4-5. TAVILY_API_KEY (for search_web research).
+ * Env: OPENAI_API_KEY (OpenAI), ANTHROPIC_API_KEY (Claude), XAI_API_KEY (Grok). Optional: OPENAI_MODEL (overrides default). Default model: grok-4-1-fast-non-reasoning. TAVILY_API_KEY (for search_web research).
  */
 
 const { generateText, tool } = require('ai');
-const { getModel } = require('./model-provider');
+const { getModel, DEFAULT_MODEL } = require('./model-provider');
 const z = require('zod');
 
 const roastConfig = require('../config/roast');
@@ -22,8 +22,6 @@ const { scheduleTimer } = require('../abilities/timer');
 const { check: checkTimerCreationLimit, record: recordTimerCreation } = require('../abilities/timer/rateLimit');
 const { playInVoiceChannel } = require('../abilities/voice');
 const { generateHollaResponse, FALLBACK_PHRASE } = require('../abilities/voice/holla');
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'claude-sonnet-4-5';
-
 const LOG_PREFIX = '[Parrott tools]';
 const MAX_STEPS = 5;
 const TAVILY_SEARCH_URL = 'https://api.tavily.com/search';

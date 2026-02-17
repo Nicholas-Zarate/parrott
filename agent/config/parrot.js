@@ -11,6 +11,7 @@ const { getPromptSectionsFromSupabase } = require('../supabase/prompt-sections')
 const { getToolDescriptionsFromSupabase } = require('../supabase/tool-descriptions');
 const { getRuntimeConfigFromSupabase } = require('../supabase/runtime-config');
 const { getVoiceDimensionsFromSupabase, buildWeightsLine } = require('../supabase/voice-dimensions');
+const { DEFAULT_MODEL } = require('../ai-sdk/model-provider');
 
 /** Default tones (fallback when Supabase not used or fetch fails). */
 const defaultTones = {
@@ -217,7 +218,6 @@ function getSystemPromptWithTools(options = {}) {
     return buildSystemPrompt(getSystemPromptSections(options), systemPromptOrderWithTools);
 }
 
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'claude-sonnet-4-5';
 const DEFAULT_MAX_COMPLETION_TOKENS = 150;
 const DEFAULT_MAX_PROMPT_TOKENS = 1000;
 

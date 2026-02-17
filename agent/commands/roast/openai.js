@@ -1,5 +1,5 @@
 /**
- * Roast and generic chat via AI SDK (OpenAI or Anthropic via model-provider).
+ * Roast and generic chat via AI SDK (OpenAI, Anthropic, or xAI via model-provider).
  * requestRoast / requestChat use getModel() so they respect the same model switch as the rest of the app.
  */
 
