@@ -49,18 +49,41 @@ function buildTools(context = {}) {
         run_roast: tool({
             description: getToolDescription('run_roast'),
             parameters: z.object({
-                targetUserId: z.string().describe('Discord user ID of the person to roast'),
+                targetUserId: z.string().optional().describe('Discord user ID when the user @mentioned someone (e.g. "roast @Harol" — pass the mentioned user\'s ID)'),
+                targetUserName: z.string().optional().describe('Plain name when no @mention (e.g. "roast Harol" — pass "Harol"; do not try to resolve to a Discord user)'),
             }),
-            execute: async ({ targetUserId }) => {
+            execute: async ({ targetUserId, targetUserName }) => {
+                const hasUserId = typeof targetUserId === 'string' && targetUserId.trim().length > 0;
+                const hasName = typeof targetUserName === 'string' && targetUserName.trim().length > 0;
+                if (!hasUserId && !hasName) {
+                    return { success: false, error: 'Provide either targetUserId (from @mention) or targetUserName (plain name, e.g. "Harol").' };
+                }
+
                 const days = 7;
                 const scope = 'server';
                 const channelName = message?.channel?.name ?? 'dm';
-                console.log(`${LOG_PREFIX} run_roast requested targetUserId=${targetUserId} days=${days} scope=${scope} in #${channelName}`);
+                console.log(`${LOG_PREFIX} run_roast requested ${hasUserId ? `targetUserId=${targetUserId}` : `targetUserName=${targetUserName}`} days=${days} scope=${scope} in #${channelName}`);
                 if (!message || !client) {
                     console.log(`${LOG_PREFIX} run_roast failed: missing Discord context`);
                     return { success: false, error: 'Missing Discord context (message/client).' };
                 }
-                // Optional: apply rate limit here using message.author.id and checkAndRecord() from commands/roast/rateLimit.js
+
+                // Name-only roast: no Discord lookup, use custom roast with the given name
+                if (!hasUserId && hasName) {
+                    const name = targetUserName.trim();
+                    try {
+                        const requestConfig = { ...roastConfig, roastType: 'custom', displayName: name };
+                        const { content } = await requestRoast('', requestConfig);
+                        console.log(`${LOG_PREFIX} run_roast success (name-only) for "${name}" type=custom`);
+                        return { success: true, roast: content };
+                    } catch (err) {
+                        console.error(`${LOG_PREFIX} run_roast error (name-only):`, err.message || err, err.detail || '');
+                        const userMsg = getOpenAIErrorMessage(err);
+                        return { success: false, error: userMsg };
+                    }
+                }
+
+                // User-ID roast: resolve Discord user and use message/activity data
                 const guild = message.guild;
                 if (!guild) {
                     return { success: false, error: 'This command must be used in a server channel.' };
