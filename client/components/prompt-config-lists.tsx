@@ -99,7 +99,7 @@ export function ToolDescriptionsList({ tools }: { tools: ToolDescription[] }) {
             <Badge variant="outline" className="font-mono text-xs">
               {t.tool_slug}
             </Badge>
-            <Badge variant={t.is_active ? "default" : "secondary"} className="shrink-0 text-xs">
+            <Badge variant={t.is_active ? "default" : "presence"} className="shrink-0 text-xs">
               {t.is_active ? "Enabled" : "Disabled"}
             </Badge>
             <span className="flex-1 min-w-0 text-sm text-muted-foreground truncate max-w-md">
@@ -127,7 +127,7 @@ export function ToolDescriptionsList({ tools }: { tools: ToolDescription[] }) {
             <>
               <SheetHeader>
                 <SheetTitle className="font-mono text-base">Tool: {selected.tool_slug}</SheetTitle>
-                <Badge variant={selected.is_active ? "default" : "secondary"} className="w-fit mt-1">
+                <Badge variant={selected.is_active ? "default" : "presence"} className="w-fit mt-1">
                   {selected.is_active ? "Enabled" : "Disabled"}
                 </Badge>
               </SheetHeader>
