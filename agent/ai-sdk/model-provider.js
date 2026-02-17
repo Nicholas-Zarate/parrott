@@ -16,6 +16,9 @@ const { xai } = require('@ai-sdk/xai');
 
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'claude-sonnet-4-5';
 
+/** Incremented on each getModel() call; used to log current model every 3 calls. */
+let getModelCallCount = 0;
+
 /** Explicit match: Anthropic Claude model ids start with or contain "claude-" (e.g. claude-sonnet-4-5). */
 function isClaudeModel(modelId) {
     const id = (modelId || '').trim().toLowerCase();
@@ -30,6 +33,11 @@ function isGrokModel(modelId) {
 
 function getModel(modelId) {
     const resolved = (modelId && String(modelId).trim()) || DEFAULT_MODEL;
+
+    getModelCallCount += 1;
+    if (getModelCallCount % 3 === 1) {
+        console.log('[Model] current model (every 3rd call):', resolved);
+    }
 
     if (isClaudeModel(resolved)) {
         const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
