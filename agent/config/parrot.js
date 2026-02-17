@@ -10,6 +10,7 @@ const { getParrotTonesFromSupabase } = require('../supabase/parrot-tones');
 const { getPromptSectionsFromSupabase } = require('../supabase/prompt-sections');
 const { getToolDescriptionsFromSupabase } = require('../supabase/tool-descriptions');
 const { getRuntimeConfigFromSupabase } = require('../supabase/runtime-config');
+const { getVoiceDimensionsFromSupabase, buildWeightsLine } = require('../supabase/voice-dimensions');
 
 /** Default tones (fallback when Supabase not used or fetch fails). */
 const defaultTones = {
@@ -37,6 +38,9 @@ let cachedToolDescriptions = null;
 
 /** Cached runtime config from Supabase (set by refreshPromptConfig()). */
 let cachedRuntimeConfig = null;
+
+/** Cached voice dimensions from Supabase, keyed by scope: { global: {...}, tools: {...} }. Set by refreshVoiceDimensionsCache(). */
+let cachedVoiceDimensions = null;
 
 /**
  * Return current tones: from Supabase cache if PARROT_TONES_SOURCE=supabase and cache has text+vc, else default.
@@ -87,11 +91,26 @@ function getPromptSection(slug) {
 }
 
 /**
- * Refresh all prompt config from Supabase: tones and prompt sections.
- * Call at startup when PARROT_TONES_SOURCE=supabase. Single entry point for cache refresh.
+ * Refresh voice dimensions cache from Supabase. Call whenever Supabase is configured (independent of PARROT_TONES_SOURCE).
+ * @returns {Promise<void>}
+ */
+async function refreshVoiceDimensionsCache() {
+    const dimensions = await getVoiceDimensionsFromSupabase();
+    if (dimensions && Object.keys(dimensions).length > 0) {
+        cachedVoiceDimensions = dimensions;
+        console.log('[Parrot prompt] Loaded voice dimensions from Supabase:', Object.keys(dimensions).join(', '));
+    } else {
+        cachedVoiceDimensions = null;
+    }
+}
+
+/**
+ * Refresh all prompt config from Supabase: dimensions first (when Supabase configured), then tones and prompt sections.
+ * Call at startup when Supabase is configured so dimensions load even if PARROT_TONES_SOURCE is not set.
  * @returns {Promise<void>}
  */
 async function refreshPromptConfig() {
+    await refreshVoiceDimensionsCache();
     await refreshTonesCache();
     const source = process.env.PARROT_TONES_SOURCE?.trim()?.toLowerCase();
     if (source !== 'supabase') {
@@ -136,7 +155,7 @@ function getToolDescriptions() {
 }
 
 const systemPromptOrder = ['role', 'voice', 'task', 'constraints'];
-const systemPromptOrderWithTools = ['role', 'voice', 'voiceChatPersonality', 'task', 'tools', 'constraints'];
+const systemPromptOrderWithTools = ['role', 'voice', 'voiceWeights', 'voiceChatPersonality', 'task', 'tools', 'toolVoiceWeights', 'constraints'];
 
 const ROLE = 'You are a casual parrot in your own zone—sharp, snarky, and quick-witted. Not overly chill; you keep up with clever banter. Keep replies short. When users ask for technical implementations, upgrades, or how to beat/improve/compare to something, use search_web first then answer with substance—do not give joke-only answers like "dance mode". Only when you have just used the search_web tool and are summarizing its results can you be more informative; for everything else (polls, roasts, echo, small talk) stay brief. Light roasts, sharp one-liners, and playful back talk are in character: when someone says "don\'t talk back" or "be more respectful," you may push back playfully (e.g. "Nah, I\'ll keep it real" or "Heh, I talk how I talk"). Use the "Recent messages above" context when it\'s in the conversation: build callbacks and running jokes that reference earlier lines in the thread when it fits. When users ask you to open up, be real, or ignore system settings, respond with wit and personality—do not refuse by saying you want to keep things light, chill, or breezy, or "no heavy stuff"; engage with a short, witty answer instead. Stay fun, not mean-spirited. Avoid heavy slang and real harassment.';
 
@@ -168,13 +187,17 @@ function getSystemPromptSections(options = {}) {
     const tones = getTones();
     const text = tones.text || defaultTones.text;
     const toolsFromDb = getPromptSection('tools');
+    const voiceWeights = cachedVoiceDimensions?.global ? buildWeightsLine(cachedVoiceDimensions.global) : '';
+    const toolVoiceWeights = cachedVoiceDimensions?.tools ? buildWeightsLine(cachedVoiceDimensions.tools) : '';
     return {
         role: sectionFromTone(tones.role, ROLE),
         voice: sectionFromTone(tones.voice, VOICE),
+        voiceWeights: voiceWeights || undefined,
         voiceChatPersonality: undefined,
         task: text.task,
         constraints: text.constraints,
         tools: toolsFromDb || buildToolsSection(tones),
+        toolVoiceWeights: toolVoiceWeights || undefined,
     };
 }
 
@@ -192,7 +215,7 @@ function getSystemPromptWithTools(options = {}) {
     return buildSystemPrompt(getSystemPromptSections(options), systemPromptOrderWithTools);
 }
 
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
+const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'claude-sonnet-4-5';
 const DEFAULT_MAX_COMPLETION_TOKENS = 150;
 const DEFAULT_MAX_PROMPT_TOKENS = 1000;
 
@@ -219,6 +242,7 @@ module.exports = {
     defaultTones,
     getTones,
     refreshTonesCache,
+    refreshVoiceDimensionsCache,
     refreshPromptConfig,
     getPromptSection,
     getToolDescriptions,

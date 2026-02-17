@@ -31,10 +31,6 @@ async function handleRoast(interaction, client) {
         return interaction.editReply({ content: 'Could not resolve server. Use this command in a server channel.' });
     }
 
-    if (!process.env.OPENAI_API_KEY?.trim()) {
-        return interaction.editReply({ content: getRoastErrorMessage({ code: 'NO_API_KEY' }) });
-    }
-
     try {
         const channelId = scope === 'channel' ? interaction.channelId : undefined;
         const { messages, activities, profile, roleNames, presence, stats } = await collectUserDataForRoast(guild, {

@@ -21,6 +21,8 @@ async function run() {
     assert('role' in result && 'voice' in result, 'result has role and voice');
     assert.strictEqual(result.role, expected.role, 'result.role matches getSystemPromptSections().role');
     assert.strictEqual(result.voice, expected.voice, 'result.voice matches getSystemPromptSections().voice');
+    if (expected.voiceWeights) assert.strictEqual(result.voiceWeights, expected.voiceWeights, 'result.voiceWeights matches when present');
+    if (expected.toolVoiceWeights) assert.strictEqual(result.toolVoiceWeights, expected.toolVoiceWeights, 'result.toolVoiceWeights matches when present');
 
     console.log('get-personality-tool test: OK');
     console.log('  get_personality.execute() returns role + voice matching getSystemPromptSections()');

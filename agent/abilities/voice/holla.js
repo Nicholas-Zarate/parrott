@@ -2,14 +2,16 @@
  * Generate a "holla at me" response: short greeting or (on small occasions) a game-based line.
  * Used when the user says "holla at me" and the VC tool is invoked with no phrase to repeat.
  *
- * Env: OPENAI_API_KEY. Falls back to FALLBACK_PHRASE on failure.
+ * Uses AI SDK + model-provider (env: OPENAI_MODEL or gpt-4o-mini for voice). Falls back to FALLBACK_PHRASE on failure.
  */
 
+const { generateText } = require('ai');
+const { getModel } = require('../../ai-sdk/model-provider');
 const { getMostCommonGameInVoiceChannel } = require('./getGameInChannel');
 const { generateGameRoast, FALLBACK_PHRASE } = require('./gameRoast');
 
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const LOG_PREFIX = '[Voice holla]';
+const VOICE_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
 /** Probability (0–1) that we use a game-based line when a game is present in VC. */
 const GAME_LINE_CHANCE = 0.2;
@@ -18,47 +20,26 @@ const GREETING_SYSTEM = 'You are a casual, friendly parrot. Reply with exactly o
 const GREETING_USER = 'Someone just said "holla at me" in the voice channel. Say one short friendly greeting to them.';
 
 /**
- * Generate one short hood-parrot greeting via OpenAI.
+ * Generate one short hood-parrot greeting via AI SDK.
  * @returns {Promise<string>}
  */
 async function generateGreeting() {
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    if (!apiKey) {
-        console.log(`${LOG_PREFIX} OPENAI_API_KEY not set, using fallback`);
-        return FALLBACK_PHRASE;
-    }
-    const messages = [
-        { role: 'system', content: GREETING_SYSTEM },
-        { role: 'user', content: GREETING_USER }
-    ];
-    const body = {
-        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-        messages,
-        max_completion_tokens: 40
-    };
     try {
-        const res = await fetch(OPENAI_URL, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(body)
+        const model = getModel(VOICE_MODEL);
+        const result = await generateText({
+            model,
+            messages: [
+                { role: 'system', content: GREETING_SYSTEM },
+                { role: 'user', content: GREETING_USER }
+            ],
+            maxTokens: 40,
         });
-        if (!res.ok) {
-            const errText = await res.text();
-            console.error(`${LOG_PREFIX} OpenAI ${res.status}:`, errText.slice(0, 200));
-            return FALLBACK_PHRASE;
-        }
-        const data = await res.json();
-        const content = data.choices?.[0]?.message?.content;
-        const line = (content && typeof content === 'string') ? content.trim() : '';
+        const line = (result.text && typeof result.text === 'string') ? result.text.trim() : '';
         if (line.length > 0) return line.slice(0, 200);
-        return FALLBACK_PHRASE;
     } catch (err) {
         console.error(`${LOG_PREFIX} error:`, err?.message || err);
-        return FALLBACK_PHRASE;
     }
+    return FALLBACK_PHRASE;
 }
 
 /**

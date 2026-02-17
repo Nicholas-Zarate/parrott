@@ -7,12 +7,13 @@
  */
 
 const { generateText } = require('ai');
-const { openai } = require('@ai-sdk/openai');
+const { getModel } = require('../ai-sdk/model-provider');
+const parrotConfig = require('../config/parrot');
 const { getConversationsForPeriod } = require('../supabase/conversation-history');
 const { insertAnnouncement } = require('../supabase/announcements');
 
 const LOG = '[Announcement job]';
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
+const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'claude-sonnet-4-5';
 const WINDOW_HOURS = Number(process.env.ANNOUNCEMENT_WINDOW_HOURS) || 6;
 const MAX_ROWS = 100;
 const MAX_CONTEXT_CHARS = 6000;
@@ -130,18 +131,13 @@ async function generateAndSaveAnnouncement(options = {}) {
         `Total conversations: ${count}. Write your 1–3 sentence rundown now (mention the day of the week).`,
     ].join('\n');
 
-    // 3. Call LLM (no tools, single completion).
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    if (!apiKey) {
-        const msg = 'OpenAI API key not configured.';
-        console.error(`${LOG} ${msg}`);
-        return { ok: false, error: msg };
-    }
-
+    // 3. Call LLM (no tools, single completion). Uses same model as parrot config when set.
+    const modelId = parrotConfig.model || DEFAULT_MODEL;
     let rundownText;
     try {
+        const model = getModel(modelId);
         const result = await generateText({
-            model: openai(DEFAULT_MODEL),
+            model,
             messages: [
                 { role: 'system', content: SYSTEM_PROMPT },
                 { role: 'user', content: userMessage },

@@ -15,7 +15,7 @@ assert(typeof tones.text.constraints === 'string', 'tones.text.constraints is st
 assert(tones.vc, 'tones.vc exists');
 assert(typeof tones.vc.task === 'string' && tones.vc.task.length > 0, 'tones.vc.task is non-empty string');
 
-// getSystemPromptSections returns role, voice, task, constraints, tools
+// getSystemPromptSections returns role, voice, task, constraints, tools; optionally voiceWeights, toolVoiceWeights
 const sections = parrotConfig.getSystemPromptSections();
 assert(sections.role && sections.role.length > 0, 'sections.role is non-empty');
 assert(sections.voice && sections.voice.length > 0, 'sections.voice is non-empty');
@@ -24,6 +24,8 @@ assert(sections.constraints && sections.constraints.length > 0, 'sections.constr
 assert(sections.tools && sections.tools.length > 0, 'sections.tools is non-empty');
 assert(sections.tools.includes('search_web'), 'sections.tools mentions search_web');
 assert(sections.tools.includes('join_voice_and_squawk'), 'sections.tools mentions join_voice_and_squawk');
+assert(sections.voiceWeights === undefined || typeof sections.voiceWeights === 'string', 'sections.voiceWeights is optional string');
+assert(sections.toolVoiceWeights === undefined || typeof sections.toolVoiceWeights === 'string', 'sections.toolVoiceWeights is optional string');
 
 // buildSystemPrompt produces non-empty string
 const fullWithTools = parrotConfig.getSystemPromptWithTools();

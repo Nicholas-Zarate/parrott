@@ -1,23 +1,11 @@
-const roastConfig = require('../../config/roast');
-
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-
 /**
- * Build the request body for chat completions. Uses max_completion_tokens when provided (required for gpt-5.2 / o-series), else max_tokens for older models.
- * @param {string} model
- * @param {Array<{ role: string, content: string }>} messages
- * @param {{ max_tokens?: number, max_completion_tokens?: number }} tokenOptions
- * @returns {Object}
+ * Roast and generic chat via AI SDK (OpenAI or Anthropic via model-provider).
+ * requestRoast / requestChat use getModel() so they respect the same model switch as the rest of the app.
  */
-function buildChatBody(model, messages, tokenOptions = {}) {
-    const body = { model, messages };
-    if (tokenOptions.max_completion_tokens != null) {
-        body.max_completion_tokens = tokenOptions.max_completion_tokens;
-    } else if (tokenOptions.max_tokens != null) {
-        body.max_tokens = tokenOptions.max_tokens;
-    }
-    return body;
-}
+
+const { generateText } = require('ai');
+const { getModel } = require('../../ai-sdk/model-provider');
+const roastConfig = require('../../config/roast');
 
 /**
  * Resolve system prompt from config: use string, sections+order, systemPromptParts, or fall back to default.
@@ -43,122 +31,100 @@ function resolveSystemPrompt(config, defaults) {
 }
 
 /**
- * Call OpenAI Chat Completions with the roast prompt and user data.
+ * Normalize errors from getModel() or generateText() to the contract callers expect (err.code, err.status).
+ * Re-throws so getOpenAIErrorMessage() and handlers work unchanged.
+ * @param {Error} err
+ * @throws {Error} With code and optionally status set.
+ */
+function normalizeProviderError(err) {
+    if (err.code === 'NO_OPENAI_API_KEY' || err.code === 'NO_ANTHROPIC_API_KEY') {
+        throw err;
+    }
+    const msg = (err.message || '').toLowerCase();
+    const status = err.status ?? (err.cause && err.cause.status) ?? (err.response && err.response.status);
+    if (status === 401 || msg.includes('401') || msg.includes('unauthorized') || msg.includes('invalid api key')) {
+        const e = new Error(err.message || 'Unauthorized');
+        e.code = 'UNAUTHORIZED';
+        e.status = 401;
+        e.cause = err;
+        throw e;
+    }
+    if (status === 429 || msg.includes('429') || msg.includes('rate limit')) {
+        const e = new Error(err.message || 'Rate limit');
+        e.code = 'RATE_LIMIT';
+        e.status = 429;
+        e.cause = err;
+        throw e;
+    }
+    if (status >= 500 || (typeof status === 'number' && status >= 500)) {
+        const e = new Error(err.message || 'Server error');
+        e.code = 'API_ERROR';
+        e.status = status;
+        e.cause = err;
+        throw e;
+    }
+    const e = new Error(err.message || 'API error');
+    e.code = 'API_ERROR';
+    e.status = status;
+    e.cause = err;
+    throw e;
+}
+
+/**
+ * Call LLM (via AI SDK) for roast prompt and user data.
  * @param {string} userDataText - Formatted user block (from formatUserDataForLLM).
  * @param {Object} [config] - Override config (default: config/roast.js).
  * @returns {Promise<{ content: string }>}
- * @throws {Error} With message suitable for logging; use getRoastErrorMessage() for user-facing text.
+ * @throws {Error} With code suitable for getRoastErrorMessage() / getOpenAIErrorMessage().
  */
 async function requestRoast(userDataText, config = roastConfig) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey || !apiKey.trim()) {
-        const err = new Error('OpenAI API key not configured');
-        err.code = 'NO_API_KEY';
-        throw err;
-    }
-
+    const modelId = config.model ?? roastConfig.model;
     const userContent = (config.userPromptTemplate || roastConfig.userPromptTemplate)
         .replace(/\{\{USER_DATA\}\}/g, userDataText);
     const systemContent = resolveSystemPrompt(config, roastConfig);
-    const model = config.model ?? roastConfig.model;
     const messages = [
         { role: 'system', content: systemContent },
         { role: 'user', content: userContent }
     ];
-    const tokenOptions = {
-        max_completion_tokens: config.max_completion_tokens ?? roastConfig.max_completion_tokens,
-        max_tokens: config.max_tokens ?? roastConfig.max_tokens
-    };
-    const body = buildChatBody(model, messages, tokenOptions);
+    const maxTokens = config.max_completion_tokens ?? config.max_tokens ?? roastConfig.max_completion_tokens ?? roastConfig.max_tokens ?? 100;
 
-    const res = await fetch(OPENAI_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-    });
-
-    if (!res.ok) {
-        const err = new Error(`OpenAI API error: ${res.status} ${res.statusText}`);
-        err.status = res.status;
-        err.code = res.status === 401 ? 'UNAUTHORIZED' : res.status === 429 ? 'RATE_LIMIT' : 'API_ERROR';
-        let detail = '';
-        try {
-            const data = await res.json();
-            detail = data.error?.message || JSON.stringify(data);
-        } catch (_) {
-            detail = await res.text();
-        }
-        err.detail = detail;
-        throw err;
+    try {
+        const model = getModel(modelId);
+        const result = await generateText({
+            model,
+            messages,
+            maxTokens,
+        });
+        const content = (result.text || '').trim();
+        return { content };
+    } catch (err) {
+        normalizeProviderError(err);
     }
-
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (content == null) {
-        const err = new Error('OpenAI returned no content');
-        err.detail = JSON.stringify(data);
-        throw err;
-    }
-    return { content: content.trim() };
 }
 
 /**
- * Generic OpenAI Chat Completions call. Use for mention replies or any non-roast chat.
- * For gpt-5.2 / o-series use max_completion_tokens; for older models use max_tokens.
+ * Generic chat completions via AI SDK (same provider resolution as requestRoast).
  * @param {Array<{ role: 'system'|'user'|'assistant', content: string }>} messages
  * @param {{ model?: string, max_tokens?: number, max_completion_tokens?: number }} [options] - Defaults from roastConfig
  * @returns {Promise<{ content: string }>}
  * @throws {Error} Same codes as requestRoast; use getOpenAIErrorMessage() for user-facing text.
  */
 async function requestChat(messages, options = {}) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey || !apiKey.trim()) {
-        const err = new Error('OpenAI API key not configured');
-        err.code = 'NO_API_KEY';
-        throw err;
-    }
-    const model = options.model ?? roastConfig.model;
-    const tokenOptions = {
-        max_completion_tokens: options.max_completion_tokens ?? roastConfig.max_completion_tokens,
-        max_tokens: options.max_tokens ?? roastConfig.max_tokens
-    };
-    const body = buildChatBody(model, messages, tokenOptions);
+    const modelId = options.model ?? roastConfig.model;
+    const maxTokens = options.max_completion_tokens ?? options.max_tokens ?? roastConfig.max_completion_tokens ?? roastConfig.max_tokens ?? 100;
 
-    const res = await fetch(OPENAI_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-    });
-
-    if (!res.ok) {
-        const err = new Error(`OpenAI API error: ${res.status} ${res.statusText}`);
-        err.status = res.status;
-        err.code = res.status === 401 ? 'UNAUTHORIZED' : res.status === 429 ? 'RATE_LIMIT' : 'API_ERROR';
-        let detail = '';
-        try {
-            const data = await res.json();
-            detail = data.error?.message || JSON.stringify(data);
-        } catch (_) {
-            detail = await res.text();
-        }
-        err.detail = detail;
-        throw err;
+    try {
+        const model = getModel(modelId);
+        const result = await generateText({
+            model,
+            messages,
+            maxTokens,
+        });
+        const content = (result.text || '').trim();
+        return { content };
+    } catch (err) {
+        normalizeProviderError(err);
     }
-
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (content == null) {
-        const err = new Error('OpenAI returned no content');
-        err.detail = JSON.stringify(data);
-        throw err;
-    }
-    return { content: content.trim() };
 }
 
 /**
@@ -167,17 +133,20 @@ async function requestChat(messages, options = {}) {
  * @returns {string}
  */
 function getOpenAIErrorMessage(err) {
-    if (err.code === 'NO_API_KEY') {
+    if (err.code === 'NO_API_KEY' || err.code === 'NO_OPENAI_API_KEY') {
         return 'OpenAI API key not configured. Set OPENAI_API_KEY in your environment or .env.';
     }
+    if (err.code === 'NO_ANTHROPIC_API_KEY') {
+        return 'Anthropic API key not configured. Set ANTHROPIC_API_KEY in your environment or .env.';
+    }
     if (err.code === 'UNAUTHORIZED' || err.status === 401) {
-        return 'Invalid OpenAI API key. Check OPENAI_API_KEY.';
+        return 'Invalid API key. Check OPENAI_API_KEY or ANTHROPIC_API_KEY for the selected model.';
     }
     if (err.code === 'RATE_LIMIT' || err.status === 429) {
-        return 'OpenAI rate limit; try again in a moment.';
+        return 'Rate limit; try again in a moment.';
     }
     if (err.status >= 500) {
-        return 'OpenAI request failed; try again later.';
+        return 'Request failed; try again later.';
     }
     return 'Something went wrong. Try again or check logs.';
 }
@@ -189,4 +158,4 @@ function getRoastErrorMessage(err) {
     return getOpenAIErrorMessage(err);
 }
 
-module.exports = { requestRoast, requestChat, getRoastErrorMessage, getOpenAIErrorMessage };
+module.exports = { requestRoast, requestChat, getRoastErrorMessage, getOpenAIErrorMessage, normalizeProviderError };
