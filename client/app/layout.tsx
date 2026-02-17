@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { DesktopSideNav, MobileNav } from "@/components/side-nav";
 import { Toaster } from "@/components/ui/sonner";
+import { ViewportHeightProvider } from "@/components/viewport-height-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -22,6 +23,13 @@ export const metadata: Metadata = {
   },
 };
 
+/** Enables safe-area insets (notch, home indicator) on supported mobile browsers. */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -32,10 +40,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased`}
       >
-        <div className="flex h-dvh flex-col md:flex-row overflow-hidden">
-          <MobileNav />
+        <ViewportHeightProvider />
+        <MobileNav />
+        <div className="root-layout flex h-dvh flex-col md:flex-row overflow-hidden">
           <DesktopSideNav />
-          <main className="flex-1 min-h-0 overflow-auto bg-background">
+          {/* Reserves space for fixed mobile app bar (56px + safe-area); no offset on desktop */}
+          <main className="flex-1 min-h-0 overflow-auto bg-background pt-[calc(3.5rem+env(safe-area-inset-top,0px))] md:pt-0">
             {children}
           </main>
         </div>

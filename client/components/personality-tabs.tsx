@@ -136,7 +136,7 @@ export function PersonalityTabs({
                 migrations to seed defaults.
               </p>
             ) : (
-              <PersonalityToneList tones={tones} />
+              <PersonalityToneList tones={tones} canEdit={perms.canEdit} />
             )}
           </section>
 

@@ -5,7 +5,7 @@
   "main": "discord-voting-bot.js",
   "scripts": {
     "start": "node discord-voting-bot.js",
-    "test": "node test/vc-tone.test.js && node test/voice-settings-from-text.test.js && node test/announcement-job.test.js && node test/activity-config.test.js && node test/activity-cooldown.test.js && node test/activity-triggers.test.js && node test/activity-listener.test.js"
+    "test": "node test/vc-tone.test.js && node test/voice-settings-from-text.test.js && node test/announcement-job.test.js && node test/activity-config.test.js && node test/activity-cooldown.test.js && node test/activity-triggers.test.js && node test/activity-listener.test.js && node test/tools/get-personality-tool.test.js && node test/tools/sing-song.test.js"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",

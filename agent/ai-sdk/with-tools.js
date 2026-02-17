@@ -23,6 +23,8 @@ const { scheduleTimer } = require('../abilities/timer');
 const { check: checkTimerCreationLimit, record: recordTimerCreation } = require('../abilities/timer/rateLimit');
 const { playInVoiceChannel } = require('../abilities/voice');
 const { generateHollaResponse, FALLBACK_PHRASE } = require('../abilities/voice/holla');
+const { getLyricsForSong } = require('../abilities/sing-song/get-lyrics');
+const { getJokeForSubject } = require('../abilities/make-joke-like/get-joke');
 const LOG_PREFIX = '[Parrott tools]';
 const MAX_STEPS = 5;
 const TAVILY_SEARCH_URL = 'https://api.tavily.com/search';
@@ -425,6 +427,122 @@ function buildTools(context = {}) {
                     return { success: false, error: result.error || 'Failed to play sound.' };
                 } catch (err) {
                     console.error(`${LOG_PREFIX} join_voice_and_squawk error:`, err?.message || err);
+                    return { success: false, error: err?.message || 'Voice error. Try again.' };
+                }
+            },
+        }),
+
+        sing_song: tool({
+            description: getToolDescription('sing_song'),
+            parameters: z.object({
+                songQuery: z.string().min(1).describe('The song name or title the user asked to sing (e.g. "Never Gonna Give You Up", "Bohemian Rhapsody").'),
+            }),
+            execute: async ({ songQuery }) => {
+                const channelName = message?.channel?.name ?? 'dm';
+                const authorTag = message?.author?.tag ?? 'unknown';
+                console.log(`${LOG_PREFIX} sing_song requested by @${authorTag} in #${channelName}: songQuery="${songQuery?.slice(0, 60)}${songQuery?.length > 60 ? '…' : ''}"`);
+
+                if (!message || !client) {
+                    console.log(`${LOG_PREFIX} sing_song failed: missing Discord context`);
+                    return { success: false, error: 'Missing Discord context.' };
+                }
+
+                const guild = message.guild;
+                if (!guild) {
+                    return { success: false, error: 'Voice is only available in a server. Use this in a server channel.' };
+                }
+
+                const member = message.member ?? await guild.members.fetch(message.author.id).catch(() => null);
+                if (!member) {
+                    return { success: false, error: 'Could not find you in this server.' };
+                }
+
+                const voiceChannel = member.voice?.channel;
+                if (!voiceChannel) {
+                    console.log(`${LOG_PREFIX} sing_song skipped: @${authorTag} not in a voice channel`);
+                    return {
+                        success: false,
+                        error: "You're not in a voice channel. Join a voice channel first, then ask again.",
+                        hint: 'Tell the user to join a voice channel and say the same thing again.',
+                    };
+                }
+
+                const lyricsResult = await getLyricsForSong(songQuery);
+                if (!lyricsResult.success) {
+                    console.log(`${LOG_PREFIX} sing_song lyrics failed: ${lyricsResult.error}`);
+                    return { success: false, error: lyricsResult.error };
+                }
+
+                const lyric = lyricsResult.lyric;
+                console.log(`${LOG_PREFIX} sing_song joining VC "${voiceChannel.name}" for @${authorTag}, lyric="${lyric.slice(0, 50)}${lyric.length > 50 ? '…' : ''}"`);
+                try {
+                    const result = await playInVoiceChannel(client, voiceChannel, { type: 'tts', text: lyric });
+                    if (result.success) {
+                        console.log(`${LOG_PREFIX} sing_song success for @${authorTag}`);
+                        return { success: true, message: 'Sang in VC.' };
+                    }
+                    console.log(`${LOG_PREFIX} sing_song failed: ${result.error}`);
+                    return { success: false, error: result.error || 'Failed to play sound.' };
+                } catch (err) {
+                    console.error(`${LOG_PREFIX} sing_song error:`, err?.message || err);
+                    return { success: false, error: err?.message || 'Voice error. Try again.' };
+                }
+            },
+        }),
+
+        make_joke_like: tool({
+            description: getToolDescription('make_joke_like'),
+            parameters: z.object({
+                subject: z.string().min(1).describe('The comedian, style, or topic the user asked for a joke "like" (e.g. "Dave Chappelle", "dad jokes", "John Mulaney").'),
+            }),
+            execute: async ({ subject }) => {
+                const channelName = message?.channel?.name ?? 'dm';
+                const authorTag = message?.author?.tag ?? 'unknown';
+                console.log(`${LOG_PREFIX} make_joke_like requested by @${authorTag} in #${channelName}: subject="${subject?.slice(0, 60)}${subject?.length > 60 ? '…' : ''}"`);
+
+                if (!message || !client) {
+                    console.log(`${LOG_PREFIX} make_joke_like failed: missing Discord context`);
+                    return { success: false, error: 'Missing Discord context.' };
+                }
+
+                const guild = message.guild;
+                if (!guild) {
+                    return { success: false, error: 'Voice is only available in a server. Use this in a server channel.' };
+                }
+
+                const member = message.member ?? await guild.members.fetch(message.author.id).catch(() => null);
+                if (!member) {
+                    return { success: false, error: 'Could not find you in this server.' };
+                }
+
+                const voiceChannel = member.voice?.channel;
+                if (!voiceChannel) {
+                    console.log(`${LOG_PREFIX} make_joke_like skipped: @${authorTag} not in a voice channel`);
+                    return {
+                        success: false,
+                        error: "You're not in a voice channel. Join a voice channel first, then ask again.",
+                        hint: 'Tell the user to join a voice channel and say the same thing again.',
+                    };
+                }
+
+                const jokeResult = await getJokeForSubject(subject);
+                if (!jokeResult.success) {
+                    console.log(`${LOG_PREFIX} make_joke_like joke lookup failed: ${jokeResult.error}`);
+                    return { success: false, error: jokeResult.error };
+                }
+
+                const joke = jokeResult.joke;
+                console.log(`${LOG_PREFIX} make_joke_like joining VC "${voiceChannel.name}" for @${authorTag}, joke="${joke.slice(0, 50)}${joke.length > 50 ? '…' : ''}"`);
+                try {
+                    const result = await playInVoiceChannel(client, voiceChannel, { type: 'tts', text: joke });
+                    if (result.success) {
+                        console.log(`${LOG_PREFIX} make_joke_like success for @${authorTag}`);
+                        return { success: true, joke, message: 'Told the joke in VC.' };
+                    }
+                    console.log(`${LOG_PREFIX} make_joke_like failed: ${result.error}`);
+                    return { success: false, error: result.error || 'Failed to play sound.' };
+                } catch (err) {
+                    console.error(`${LOG_PREFIX} make_joke_like error:`, err?.message || err);
                     return { success: false, error: err?.message || 'Voice error. Try again.' };
                 }
             },

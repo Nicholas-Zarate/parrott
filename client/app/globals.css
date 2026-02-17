@@ -48,6 +48,9 @@
 }
 
 :root {
+  /* Set by ViewportHeightProvider; fallback for SSR and before hydration */
+  --viewport-height: 100vh;
+  --viewport-width: 100vw;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -124,5 +127,16 @@
   body {
     @apply bg-background text-foreground;
     @apply bg-background text-foreground;
+  }
+  /* iOS Safari: fallback for root height so flex layout doesn't collapse on older Safari */
+  .min-h-screen {
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    min-height: 100dvh;
+  }
+  .root-layout {
+    height: 100vh;
+    height: -webkit-fill-available;
+    height: 100dvh;
   }
 }

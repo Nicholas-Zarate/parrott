@@ -1,0 +1,14 @@
+---
+description: When adding a new Parrot tool, you must update code, tool descriptions, and the tools prompt section so the model actually calls the tool.
+globs: agent/ai-sdk/with-tools.js, agent/supabase/migrations/*.sql
+---
+
+# Adding a new Parrot tool
+
+When you add a new tool for the @mention parrot (e.g. a new capability in `agent/ai-sdk/with-tools.js`), you **must** do all three of the following. Otherwise the model may never call the tool (it will have the tool in its schema but no instruction to use it).
+
+1. **Implement the tool** in `agent/ai-sdk/with-tools.js` (add to `buildTools()`, with parameters and `execute`).
+2. **Add or update the row in `parrot_tool_descriptions`** via a Supabase migration so the model gets the tool description (e.g. `insert into public.parrot_tool_descriptions (tool_slug, description, ...) ... on conflict (tool_slug) do update set description = excluded.description`).
+3. **Update the `parrot_prompt_sections` content for slug `tools`** in a migration. The system prompt is built from `agent/config/parrot.js` → `getPromptSection('tools')`; this long paragraph is where the model learns *when* to use each tool. Add a clause for the new tool (e.g. "my_tool (when the user says X, call my_tool with ...).") so the model is explicitly told when to use it.
+
+If step 3 is skipped, logs will show `tools_called: []` and the bot will reply in text only. See `instructions/POSTMORTEM_SING_SONG_TOOLS_NOT_CALLED.md` for the sing_song example.

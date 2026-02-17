@@ -1,10 +1,10 @@
 /**
  * get_personality tool: returns role and voice from getSystemPromptSections().
- * Run from agent/: node test/get-personality-tool.test.js
+ * Run from agent/: node test/tools/get-personality-tool.test.js
  */
 const assert = require('assert');
-const { buildTools } = require('../ai-sdk/with-tools');
-const parrotConfig = require('../config/parrot');
+const { buildTools } = require('../../ai-sdk/with-tools');
+const parrotConfig = require('../../config/parrot');
 
 async function run() {
     const tools = buildTools({});

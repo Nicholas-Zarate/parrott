@@ -130,9 +130,11 @@ client.on('messageCreate', async (message) => {
     }
     const botMentioned = fromContent || fromMentions || fromRole;
 
-    // Diagnostic when there are user/role mentions but we didn't detect the bot (so we can see why)
+    // Diagnostic when there are user/role mentions but we didn't detect the bot (so we can see why).
+    // Skip for any bot message (our reply "juan second..." triggers messageCreate with botMentioned=false).
+    const isBotMessage = message.author?.bot === true || message.author?.id === botId;
     const hasAnyMentions = mentionCount > 0 || (message.mentions?.roles?.size ?? 0) > 0;
-    if (hasAnyMentions && !botMentioned) {
+    if (!isBotMessage && hasAnyMentions && !botMentioned) {
         const preview = content.length === 0 ? '(empty)' : content.slice(0, 120).replace(/\n/g, ' ');
         console.log(`[Debug] mention check failed | content length: ${content.length} | content preview: ${preview} | bot id: ${botId ?? 'missing'}`);
         if (content.length === 0) {
