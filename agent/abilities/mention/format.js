@@ -39,6 +39,35 @@ function stripBotMention(content, botUser) {
     return content.replace(mentionPattern, '').trim();
 }
 
+/** Regex for user mentions only: <@userId> or <@!userId>. (?!&) excludes role mentions <@&roleId>. */
+const USER_MENTION_REGEX = /<@(?!&)!?(\d+)>/g;
+
+/**
+ * Replace user mentions in content with @displayName (order of appearance in content).
+ * So the model sees "what do you think of @HOgs_tooth?" instead of raw <@snowflake>.
+ * Uses content order (regex match order), not message.mentions.users iteration order.
+ *
+ * @param {string} content - Message content (typically after stripBotMention)
+ * @param {import('discord.js').Message} message - For message.mentions.users and message.guild
+ * @param {import('discord.js').User} [botUser] - Bot user; mentions of this ID are replaced with empty string
+ * @returns {string}
+ */
+function resolveUserMentionsInContent(content, message, botUser = null) {
+    if (!content || typeof content !== 'string') return content || '';
+    const mentions = message?.mentions?.users;
+    const guild = message?.guild;
+    const botId = botUser?.id ?? null;
+    const re = new RegExp(USER_MENTION_REGEX.source, 'g');
+
+    return content.replace(re, (match, id) => {
+        if (botId && id === botId) return '';
+        const user = mentions?.get(id);
+        const member = guild?.members?.cache?.get(id);
+        const label = member?.displayName ?? user?.username ?? user?.tag ?? 'unknown_user';
+        return `@${label}`;
+    });
+}
+
 /**
  * Fetch messages above the current one and format them for the parrot (e.g. "the message above me").
  * Performs I/O: message.channel.messages.fetch({ limit, before: message.id }). Newest first.
@@ -69,6 +98,7 @@ async function getRecentMessagesAboveForParrot(message, botUser = null, options 
             const isBot = botUser && m.author?.id === botUser.id;
             const label = isBot ? 'Bot' : (m.author?.displayName ?? m.author?.username ?? m.author?.tag ?? 'Someone');
             let content = (m.content || '').trim();
+            content = resolveUserMentionsInContent(content, m, botUser);
             if (content.length > RECENT_MESSAGE_SNIPPET_LEN) {
                 content = content.slice(0, RECENT_MESSAGE_SNIPPET_LEN) + '…';
             }
@@ -135,6 +165,7 @@ function formatMessageForParrot(message, botUser = null) {
     const ch = message.channel;
     const channelName = (ch?.parent ? ch.parent.name : ch?.name) ?? 'unknown';
     let content = stripBotMention(message.content || '', botUser);
+    content = resolveUserMentionsInContent(content, message, botUser);
     if (content.length > MAX_MESSAGE_CONTENT_LENGTH) {
         content = content.slice(0, MAX_MESSAGE_CONTENT_LENGTH) + '…';
     }
@@ -148,6 +179,45 @@ function formatMessageForParrot(message, botUser = null) {
 const ONLINE_NOW_MAX_NAMES = 30;
 /** Max chars for the online-now line. */
 const ONLINE_NOW_MAX_CHARS = 600;
+
+/** Max mentioned users in the "Mentioned users in this message" line (for tools). */
+const MENTIONED_USERS_LINE_MAX_USERS = 8;
+/** Max chars for that line. */
+const MENTIONED_USERS_LINE_MAX_CHARS = 320;
+
+/**
+ * Build "Mentioned users in this message: @Name (id 123), …" from the current message.
+ * Order follows first appearance in content. Excludes bot. So the model can pass correct targetUserId to tools.
+ *
+ * @param {import('discord.js').Message} message
+ * @param {import('discord.js').User} [botUser]
+ * @returns {string} Non-empty line or ''
+ */
+function getMentionedUsersLineForParrot(message, botUser = null) {
+    const content = stripBotMention(message.content || '', botUser);
+    if (!content) return '';
+    const mentions = message?.mentions?.users;
+    const guild = message?.guild;
+    const botId = botUser?.id ?? null;
+    const re = new RegExp(USER_MENTION_REGEX.source, 'g');
+    const seen = new Set();
+    const parts = [];
+    let match;
+    while ((match = re.exec(content)) !== null) {
+        const id = match[1];
+        if (botId && id === botId) continue;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const user = mentions?.get(id);
+        const member = guild?.members?.cache?.get(id);
+        const label = member?.displayName ?? user?.username ?? user?.tag ?? 'unknown_user';
+        parts.push(`@${label} (id ${id})`);
+        if (parts.length >= MENTIONED_USERS_LINE_MAX_USERS) break;
+    }
+    if (parts.length === 0) return '';
+    const line = `Mentioned users in this message: ${parts.join(', ')}.`;
+    return line.length > MENTIONED_USERS_LINE_MAX_CHARS ? line.slice(0, MENTIONED_USERS_LINE_MAX_CHARS - 1) + '…' : line;
+}
 
 /**
  * Build a short "who is online now" line from the guild (requires GuildPresences + GuildMembers).
@@ -195,6 +265,8 @@ async function buildUserContentForParrot(message, botUser = null) {
     const recentBlock = await getRecentMessagesAboveForParrot(message, botUser);
     if (recentBlock) parts.push(`Recent messages above (newest first):\n${recentBlock}`);
     parts.push(userContext);
+    const mentionedLine = getMentionedUsersLineForParrot(message, botUser);
+    if (mentionedLine) parts.push(mentionedLine);
     return parts.join('\n\n');
 }
 
@@ -204,7 +276,11 @@ module.exports = {
     getRecentMessagesAboveForParrot,
     getOnlineNowForParrot,
     buildUserContentForParrot,
+    getMentionedUsersLineForParrot,
     isBotMentionedInContent,
+    resolveUserMentionsInContent,
+    stripBotMention,
+    USER_MENTION_REGEX,
     MAX_MESSAGE_CONTENT_LENGTH,
     RECENT_MESSAGES_ABOVE_LIMIT,
     RECENT_MESSAGES_ABOVE_MAX_CHARS
