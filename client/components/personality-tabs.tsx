@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { PersonalityToneList, type ParrotTone } from "@/components/personality-tone-list";
 import { PromptSectionsList, ToolDescriptionsList } from "@/components/prompt-config-lists";
 import { VoiceStyleSlidersCard } from "@/components/voice-style-sliders-card";
+import { RoastConfigCard } from "@/components/roast-config-card";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { MessageSquare, Sparkles, FileText, Wrench, ChevronRight } from "lucide-react";
 
@@ -30,6 +31,7 @@ type PersonalityTabsProps = {
 
 const TAB_TONES = "tones";
 const TAB_PROMPT_TOOLS = "prompt-tools";
+const TAB_ROAST = "roast";
 
 export function PersonalityTabs({
   tones,
@@ -83,6 +85,17 @@ export function PersonalityTabs({
               Prompt & tools
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setActiveTab(TAB_ROAST)}
+            className={`rounded-t-md border px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === TAB_ROAST
+                ? "border-border border-b-transparent bg-background text-foreground -mb-px"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            }`}
+          >
+            Roast
+          </button>
         </nav>
       </div>
 
@@ -195,6 +208,18 @@ export function PersonalityTabs({
               />
             </div>
           </details>
+        </div>
+      )}
+
+      {/* Tab: Roast */}
+      {activeTab === TAB_ROAST && (
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            Control how often each roast type is used: message-based, game/activity-based, or
+            custom (no context). The agent picks a type at random using these weights on each
+            roast.
+          </p>
+          <RoastConfigCard canEdit={perms.canEdit} />
         </div>
       )}
     </div>

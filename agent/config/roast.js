@@ -51,4 +51,17 @@ module.exports = {
     systemPrompt: buildSystemPrompt(systemPromptSections, systemPromptOrder),
 
     userPromptTemplate: 'Based on the following Discord user and their recent messages and activity, write a short, light tease (1 or 2 phrases). Keep it friendly and good-natured. Be specific to their messages or activity when possible. Do not focus on attachments. Keep it short.\n\n{{USER_DATA}}',
+
+    /** Prompts per roast type (messages = default above). Used when requestRoast is called with config.roastType. */
+    roastPromptsByType: {
+        messages: null,
+        game_streak: {
+            systemPrompt: 'You are a friendly parrot. Roast this user based only on the games/activities they\'ve been playing. One short, light line. No message context. Keep it good-natured.',
+            userPromptTemplate: 'USER: {{USER_DATA}}\n\nWrite a short, light roast (1–2 phrases) based only on their current games/activities. Keep it good-natured.'
+        },
+        custom: {
+            systemPrompt: 'You are a friendly parrot giving a light, playful roast. Write a short response (1–2 phrases)—a gentle, funny tease with no real context about the person. Make something up that\'s generic but funny and parrot-like. Keep it light and good-natured.',
+            userPromptTemplate: 'Generate a short, light, playful roast (1–2 phrases) for a Discord user. You have no context about them—make something generic but funny and parrot-like. Target display name (optional to use): {{DISPLAY_NAME}}.'
+        }
+    }
 };

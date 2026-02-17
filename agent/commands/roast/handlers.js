@@ -1,12 +1,14 @@
 const { resolveGuild } = require('../../util/guild');
 const roastConfig = require('../../config/roast');
+const parrotConfig = require('../../config/parrot');
 const { checkAndRecord } = require('./rateLimit');
 const { collectUserDataForRoast } = require('./collect');
-const { formatUserDataForLLM } = require('./format');
+const { formatUserDataForLLM, formatActivityOnlyForLLM } = require('./format');
+const { chooseRoastType } = require('./choose-type');
 const { requestRoast, getRoastErrorMessage } = require('./openai');
 
 /**
- * Handle /roast slash command: collect user data, format, call OpenAI, reply with roast.
+ * Handle /roast slash command: collect user data, choose roast type by weight, call OpenAI, reply with roast.
  * Rate limited to config.rateLimit.maxUses per user per config.rateLimit.windowMinutes.
  * @param {import('discord.js').ChatInputCommandInteraction} interaction
  * @param {import('discord.js').Client} client
@@ -41,26 +43,40 @@ async function handleRoast(interaction, client) {
             channelId
         });
 
-        if (messages.length === 0) {
-            return interaction.editReply({
-                content: 'No messages found for that user in the selected scope and time range.'
-            });
-        }
-
-        const userDataText = formatUserDataForLLM({
-            userTag: targetUser.tag,
-            userId: targetUser.id,
-            profile,
-            roleNames,
-            presence,
-            activities,
-            stats,
-            messages,
-            days,
-            scope
+        const weights = parrotConfig.getRoastWeights();
+        const roastType = chooseRoastType(weights, {
+            hasMessages: messages.length > 0,
+            activityCount: activities.length
         });
 
-        const { content } = await requestRoast(userDataText);
+        let userDataText;
+        const requestConfig = { ...roastConfig, roastType, displayName: profile.displayName || targetUser.username };
+
+        if (roastType === 'messages') {
+            userDataText = formatUserDataForLLM({
+                userTag: targetUser.tag,
+                userId: targetUser.id,
+                profile,
+                roleNames,
+                presence,
+                activities,
+                stats,
+                messages,
+                days,
+                scope,
+                messageContextOnly: true
+            });
+        } else if (roastType === 'game_streak') {
+            userDataText = formatActivityOnlyForLLM({
+                userTag: targetUser.tag,
+                displayName: profile.displayName || targetUser.username,
+                activities
+            });
+        } else {
+            userDataText = '';
+        }
+
+        const { content } = await requestRoast(userDataText, requestConfig);
         await interaction.editReply({ content: content || 'No roast generated.' });
     } catch (err) {
         console.error('Roast error:', err.message || err, err.detail || '');
