@@ -20,6 +20,7 @@ type ToolDescription = {
   id: string;
   tool_slug: string;
   description: string;
+  is_active: boolean;
 };
 
 type PersonalityTabsProps = {

@@ -8,7 +8,7 @@
  */
 
 const { generateText, tool } = require('ai');
-const { getModel } = require('./model-provider');
+const { getModel, getProviderLabel, DEFAULT_MODEL } = require('./model-provider');
 const z = require('zod');
 
 const roastConfig = require('../config/roast');
@@ -21,10 +21,10 @@ const { createHearingPollInChannel } = require('../commands/poll/create');
 const { TIMER } = require('../config/constants');
 const { scheduleTimer } = require('../abilities/timer');
 const { check: checkTimerCreationLimit, record: recordTimerCreation } = require('../abilities/timer/rateLimit');
-const { playInVoiceChannel } = require('../abilities/voice');
+const { playInVoiceChannel, playStallInVoice } = require('../abilities/voice');
 const { generateHollaResponse, FALLBACK_PHRASE } = require('../abilities/voice/holla');
 const { getLyricsForSong } = require('../abilities/sing-song/get-lyrics');
-const { getJokeForSubject } = require('../abilities/make-joke-like/get-joke');
+// const { getJokeForSubject } = require('../abilities/make-joke-like/get-joke');
 const LOG_PREFIX = '[Parrott tools]';
 const MAX_STEPS = 5;
 const TAVILY_SEARCH_URL = 'https://api.tavily.com/search';
@@ -467,6 +467,13 @@ function buildTools(context = {}) {
                     };
                 }
 
+                const displayName = member.displayName || message.author?.username || 'you';
+                try {
+                    await playStallInVoice(client, voiceChannel, { template: 'song', userName: displayName });
+                } catch (stallErr) {
+                    console.log(`${LOG_PREFIX} sing_song stall message failed (continuing):`, stallErr?.message || stallErr);
+                }
+
                 const lyricsResult = await getLyricsForSong(songQuery);
                 if (!lyricsResult.success) {
                     console.log(`${LOG_PREFIX} sing_song lyrics failed: ${lyricsResult.error}`);
@@ -490,63 +497,65 @@ function buildTools(context = {}) {
             },
         }),
 
-        make_joke_like: tool({
-            description: getToolDescription('make_joke_like'),
-            parameters: z.object({
-                subject: z.string().min(1).describe('The comedian, style, or topic the user asked for a joke "like" (e.g. "Dave Chappelle", "dad jokes", "John Mulaney").'),
-            }),
-            execute: async ({ subject }) => {
-                const channelName = message?.channel?.name ?? 'dm';
-                const authorTag = message?.author?.tag ?? 'unknown';
-                console.log(`${LOG_PREFIX} make_joke_like requested by @${authorTag} in #${channelName}: subject="${subject?.slice(0, 60)}${subject?.length > 60 ? '…' : ''}"`);
-
-                if (!message || !client) {
-                    console.log(`${LOG_PREFIX} make_joke_like failed: missing Discord context`);
-                    return { success: false, error: 'Missing Discord context.' };
-                }
-
-                const guild = message.guild;
-                if (!guild) {
-                    return { success: false, error: 'Voice is only available in a server. Use this in a server channel.' };
-                }
-
-                const member = message.member ?? await guild.members.fetch(message.author.id).catch(() => null);
-                if (!member) {
-                    return { success: false, error: 'Could not find you in this server.' };
-                }
-
-                const voiceChannel = member.voice?.channel;
-                if (!voiceChannel) {
-                    console.log(`${LOG_PREFIX} make_joke_like skipped: @${authorTag} not in a voice channel`);
-                    return {
-                        success: false,
-                        error: "You're not in a voice channel. Join a voice channel first, then ask again.",
-                        hint: 'Tell the user to join a voice channel and say the same thing again.',
-                    };
-                }
-
-                const jokeResult = await getJokeForSubject(subject);
-                if (!jokeResult.success) {
-                    console.log(`${LOG_PREFIX} make_joke_like joke lookup failed: ${jokeResult.error}`);
-                    return { success: false, error: jokeResult.error };
-                }
-
-                const joke = jokeResult.joke;
-                console.log(`${LOG_PREFIX} make_joke_like joining VC "${voiceChannel.name}" for @${authorTag}, joke="${joke.slice(0, 50)}${joke.length > 50 ? '…' : ''}"`);
-                try {
-                    const result = await playInVoiceChannel(client, voiceChannel, { type: 'tts', text: joke });
-                    if (result.success) {
-                        console.log(`${LOG_PREFIX} make_joke_like success for @${authorTag}`);
-                        return { success: true, joke, message: 'Told the joke in VC.' };
-                    }
-                    console.log(`${LOG_PREFIX} make_joke_like failed: ${result.error}`);
-                    return { success: false, error: result.error || 'Failed to play sound.' };
-                } catch (err) {
-                    console.error(`${LOG_PREFIX} make_joke_like error:`, err?.message || err);
-                    return { success: false, error: err?.message || 'Voice error. Try again.' };
-                }
-            },
-        }),
+        // make_joke_like: disabled for now (comment back in with-tools.js + set is_active true in parrot_tool_descriptions to re-enable)
+        // make_joke_like: tool({
+        //     description: getToolDescription('make_joke_like'),
+        //     parameters: z.object({
+        //         subject: z.string().min(1).describe('The comedian, style, or topic the user asked for a joke "like" (e.g. "Dave Chappelle", "dad jokes", "John Mulaney").'),
+        //     }),
+        //     execute: async ({ subject }) => {
+        //         const channelName = message?.channel?.name ?? 'dm';
+        //         const authorTag = message?.author?.tag ?? 'unknown';
+        //         console.log(`${LOG_PREFIX} make_joke_like requested by @${authorTag} in #${channelName}: subject="${subject?.slice(0, 60)}${subject?.length > 60 ? '…' : ''}"`);
+        //         if (!message || !client) {
+        //             console.log(`${LOG_PREFIX} make_joke_like failed: missing Discord context`);
+        //             return { success: false, error: 'Missing Discord context.' };
+        //         }
+        //         const guild = message.guild;
+        //         if (!guild) {
+        //             return { success: false, error: 'Voice is only available in a server. Use this in a server channel.' };
+        //         }
+        //         const member = message.member ?? await guild.members.fetch(message.author.id).catch(() => null);
+        //         if (!member) {
+        //             return { success: false, error: 'Could not find you in this server.' };
+        //         }
+        //         const voiceChannel = member.voice?.channel;
+        //         if (!voiceChannel) {
+        //             console.log(`${LOG_PREFIX} make_joke_like skipped: @${authorTag} not in a voice channel`);
+        //             return {
+        //                 success: false,
+        //                 error: "You're not in a voice channel. Join a voice channel first, then ask again.",
+        //                 hint: 'Tell the user to join a voice channel and say the same thing again.',
+        //             };
+        //         }
+        //         const displayName = member.displayName || message.author?.username || 'you';
+        //         try {
+        //             await playStallInVoice(client, voiceChannel, { template: 'joke', userName: displayName });
+        //         } catch (stallErr) {
+        //             console.log(`${LOG_PREFIX} make_joke_like stall message failed (continuing):`, stallErr?.message || stallErr);
+        //         }
+        //         const jokeResult = await getJokeForSubject(subject);
+        //         if (!jokeResult.success) {
+        //             console.log(`${LOG_PREFIX} make_joke_like joke lookup failed: ${jokeResult.error}`);
+        //             return { success: false, error: jokeResult.error };
+        //         }
+        //         const joke = jokeResult.joke;
+        //         const logAsError = jokeResult.isFallback === true;
+        //         console.log(`${LOG_PREFIX} make_joke_like joining VC "${voiceChannel.name}" for @${authorTag}, joke="${joke.slice(0, 50)}${joke.length > 50 ? '…' : ''}"`);
+        //         try {
+        //             const result = await playInVoiceChannel(client, voiceChannel, { type: 'tts', text: joke, logAsError });
+        //             if (result.success) {
+        //                 console.log(`${LOG_PREFIX} make_joke_like success for @${authorTag}`);
+        //                 return { success: true, joke, message: 'Told the joke in VC.' };
+        //             }
+        //             console.log(`${LOG_PREFIX} make_joke_like failed: ${result.error}`);
+        //             return { success: false, error: result.error || 'Failed to play sound.' };
+        //         } catch (err) {
+        //             console.error(`${LOG_PREFIX} make_joke_like error:`, err?.message || err);
+        //             return { success: false, error: err?.message || 'Voice error. Try again.' };
+        //         }
+        //     },
+        // }),
 
         echo: tool({
             description: getToolDescription('echo'),
@@ -558,18 +567,40 @@ function buildTools(context = {}) {
             },
         }),
 
-        get_personality: tool({
-            description: getToolDescription('get_personality'),
-            parameters: z.object({}),
-            execute: async () => {
-                const sections = parrotConfig.getSystemPromptSections();
-                const out = {
-                    role: sections.role ?? '',
-                    voice: sections.voice ?? '',
-                };
-                if (sections.voiceWeights) out.voiceWeights = sections.voiceWeights;
-                if (sections.toolVoiceWeights) out.toolVoiceWeights = sections.toolVoiceWeights;
-                return out;
+        introspection: tool({
+            description: getToolDescription('introspection'),
+            parameters: z.object({
+                query: z.enum(['personality', 'model', 'tools']).describe('personality: return role and voice; model: return current AI model and provider; tools: return list of available tools with description and example'),
+            }),
+            execute: async ({ query }) => {
+                if (query === 'personality') {
+                    const sections = parrotConfig.getSystemPromptSections();
+                    const out = {
+                        role: sections.role ?? '',
+                        voice: sections.voice ?? '',
+                    };
+                    if (sections.voiceWeights) out.voiceWeights = sections.voiceWeights;
+                    if (sections.toolVoiceWeights) out.toolVoiceWeights = sections.toolVoiceWeights;
+                    return out;
+                }
+                if (query === 'model') {
+                    const modelId = parrotConfig.model || DEFAULT_MODEL;
+                    return {
+                        model: modelId,
+                        provider: getProviderLabel(modelId),
+                    };
+                }
+                if (query === 'tools') {
+                    const metadata = parrotConfig.getToolMetadata();
+                    const tools = Object.entries(metadata).map(([name, meta]) => ({
+                        name,
+                        description: (meta && meta.description) ?? '',
+                        example: (meta && meta.example_command) ?? '',
+                        enabled: (meta && meta.enabled) !== false,
+                    }));
+                    return { tools };
+                }
+                return { error: 'Unknown query.' };
             },
         }),
     };

@@ -62,9 +62,22 @@ function getModel(modelId) {
     return openai(resolved);
 }
 
+/**
+ * Human-readable provider label for a model id (for introspection 'model' subtool).
+ * @param {string} [modelId]
+ * @returns {'Anthropic' | 'xAI' | 'OpenAI'}
+ */
+function getProviderLabel(modelId) {
+    const id = (modelId && String(modelId).trim()) || DEFAULT_MODEL;
+    if (isClaudeModel(id)) return 'Anthropic';
+    if (isGrokModel(id)) return 'xAI';
+    return 'OpenAI';
+}
+
 module.exports = {
     getModel,
     isClaudeModel,
     isGrokModel,
+    getProviderLabel,
     DEFAULT_MODEL,
 };

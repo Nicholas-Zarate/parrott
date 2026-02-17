@@ -47,7 +47,7 @@ async function playInVoiceChannel(client, voiceChannel, options) {
 
     if (options.type === 'tts') {
         const voiceSettings = options.voiceSettings || {};
-        const ttsResult = await generateAudio(options.text || '', voiceSettings);
+        const ttsResult = await generateAudio(options.text || '', voiceSettings, { logAsError: options.logAsError });
         if (!ttsResult.success) {
             console.log(`${LOG_PREFIX} TTS failed: ${ttsResult.error}`);
             return { success: false, error: ttsResult.error };

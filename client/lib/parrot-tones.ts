@@ -31,3 +31,28 @@ export async function updateToneDescription(
   if (error) return { error: error.message };
   return { error: null, updated_at: data?.updated_at ?? updated_at };
 }
+
+export type UpdateToneActiveResult = {
+  error: string | null;
+  updated_at?: string;
+};
+
+/**
+ * Update a tone's is_active and updated_at. Used for enable/disable media tones (Text, Voice).
+ */
+export async function updateToneActive(
+  id: string,
+  is_active: boolean
+): Promise<UpdateToneActiveResult> {
+  const supabase = createClient();
+  const updated_at = new Date().toISOString();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({ is_active, updated_at })
+    .eq("id", id)
+    .select("updated_at")
+    .single();
+
+  if (error) return { error: error.message };
+  return { error: null, updated_at: data?.updated_at ?? updated_at };
+}
