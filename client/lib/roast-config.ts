@@ -72,41 +72,49 @@ export async function updateRoastConfig(
 
   if (config.weight_messages != null) {
     updates.push(
-      supabase
-        .from(TABLE)
-        .update({ value_int: Math.max(0, Math.min(100, config.weight_messages)), updated_at: now })
-        .eq("key", "roast_weight_messages")
-        .then((r) => ({ error: r.error?.message ?? null })) as Promise<Result>
+      Promise.resolve(
+        supabase
+          .from(TABLE)
+          .update({ value_int: Math.max(0, Math.min(100, config.weight_messages)), updated_at: now })
+          .eq("key", "roast_weight_messages")
+          .then((r) => ({ error: r.error?.message ?? null }))
+      )
     );
   }
   if (config.weight_game_streak != null) {
     updates.push(
-      supabase
-        .from(TABLE)
-        .update({ value_int: Math.max(0, Math.min(100, config.weight_game_streak)), updated_at: now })
-        .eq("key", "roast_weight_game_streak")
-        .then((r) => ({ error: r.error?.message ?? null })) as Promise<Result>
+      Promise.resolve(
+        supabase
+          .from(TABLE)
+          .update({ value_int: Math.max(0, Math.min(100, config.weight_game_streak)), updated_at: now })
+          .eq("key", "roast_weight_game_streak")
+          .then((r) => ({ error: r.error?.message ?? null }))
+      )
     );
   }
   if (config.weight_custom != null) {
     updates.push(
-      supabase
-        .from(TABLE)
-        .update({ value_int: Math.max(0, Math.min(100, config.weight_custom)), updated_at: now })
-        .eq("key", "roast_weight_custom")
-        .then((r) => ({ error: r.error?.message ?? null })) as Promise<Result>
+      Promise.resolve(
+        supabase
+          .from(TABLE)
+          .update({ value_int: Math.max(0, Math.min(100, config.weight_custom)), updated_at: now })
+          .eq("key", "roast_weight_custom")
+          .then((r) => ({ error: r.error?.message ?? null }))
+      )
     );
   }
   if (config.game_streak_min_activities != null) {
     updates.push(
-      supabase
-        .from(TABLE)
-        .update({
-          value_int: Math.max(0, Math.floor(Number(config.game_streak_min_activities))),
-          updated_at: now,
-        })
-        .eq("key", "roast_game_streak_min_activities")
-        .then((r) => ({ error: r.error?.message ?? null })) as Promise<Result>
+      Promise.resolve(
+        supabase
+          .from(TABLE)
+          .update({
+            value_int: Math.max(0, Math.floor(Number(config.game_streak_min_activities))),
+            updated_at: now,
+          })
+          .eq("key", "roast_game_streak_min_activities")
+          .then((r) => ({ error: r.error?.message ?? null }))
+      )
     );
   }
 
