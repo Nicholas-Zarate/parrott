@@ -8,7 +8,7 @@
  */
 
 const { generateText } = require('ai');
-const { openai } = require('@ai-sdk/openai');
+const { getModel } = require('../ai-sdk/model-provider');
 const parrotConfig = require('../config/parrot');
 const activityConfig = require('../config/activity');
 const { playInVoiceChannel } = require('../abilities/voice');
@@ -18,7 +18,7 @@ const { hasBlockedRole } = require('../abilities/restricted-roles');
 const { getAllowActivityDm } = require('../supabase/user-dm-preferences');
 
 const LOG_PREFIX = '[Activity deliver]';
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
+const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'claude-sonnet-4-5';
 
 /** System prompt templates per trigger type, giving the AI context for a short reaction. */
 const TRIGGER_PROMPTS = {
@@ -45,12 +45,6 @@ const TRIGGER_PROMPTS = {
  * @returns {Promise<string>}
  */
 async function generateMessage(triggerType, context) {
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    if (!apiKey) {
-        console.log(`${LOG_PREFIX} No OPENAI_API_KEY, using fallback message.`);
-        return getFallbackMessage(triggerType, context);
-    }
-
     const promptFn = TRIGGER_PROMPTS[triggerType];
     if (!promptFn) {
         console.log(`${LOG_PREFIX} No prompt template for "${triggerType}", using fallback.`);
@@ -66,7 +60,7 @@ async function generateMessage(triggerType, context) {
     console.log(`${LOG_PREFIX} User prompt: "${userPrompt}"`);
 
     try {
-        const model = openai(modelId);
+        const model = getModel(modelId);
         const result = await generateText({
             model,
             messages: [

@@ -60,7 +60,7 @@ client.on('ready', async () => {
         console.error('Error registering commands:', error);
     }
     const parrotConfig = require('./config/parrot');
-    if (process.env.PARROT_TONES_SOURCE?.trim()?.toLowerCase() === 'supabase') {
+    if (process.env.SUPABASE_URL?.trim() && (process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim())) {
         await parrotConfig.refreshPromptConfig();
     }
 

@@ -13,10 +13,11 @@ import {
   Activity,
   ChevronDown,
   ChevronRight,
-  Settings,
+  Building2,
   Users,
   User,
   Sparkles,
+  Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ function isActivitiesGroup(item: NavItem): item is NavItem & { children: typeof 
 
 const settingsChildren = [
   { href: "/settings/team", label: "Team", icon: Users },
+  { href: "/settings/model", label: "Model", icon: Cpu },
 ] as const;
 
 /**
@@ -204,7 +206,7 @@ function NavLinks({
         </>
       )}
 
-      {/* Admin-only: Settings section */}
+      {/* Admin-only: Organization section */}
       {perms.isAdmin && (
         <>
           {!collapsed && (
@@ -215,7 +217,7 @@ function NavLinks({
               <Link
                 href="/settings/team"
                 onClick={onNavigate}
-                title="Team"
+                title="Organization"
                 className={cn(
                   "flex items-center rounded-md text-sm font-medium transition-colors",
                   "justify-center px-2 py-2",
@@ -224,7 +226,7 @@ function NavLinks({
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )}
               >
-                <Settings className="size-4 shrink-0" aria-hidden />
+                <Building2 className="size-4 shrink-0" aria-hidden />
               </Link>
             </li>
           ) : (
@@ -241,8 +243,8 @@ function NavLinks({
                 )}
                 aria-expanded={settingsExpanded}
               >
-                <Settings className="size-4 shrink-0" aria-hidden />
-                <span className="flex-1 text-left">Settings</span>
+                <Building2 className="size-4 shrink-0" aria-hidden />
+                <span className="flex-1 text-left">Organization</span>
                 {settingsExpanded ? (
                   <ChevronDown className="size-4 shrink-0" aria-hidden />
                 ) : (

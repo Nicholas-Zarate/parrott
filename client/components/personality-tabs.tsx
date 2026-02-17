@@ -4,7 +4,9 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { PersonalityToneList, type ParrotTone } from "@/components/personality-tone-list";
 import { PromptSectionsList, ToolDescriptionsList } from "@/components/prompt-config-lists";
-import { MessageSquare, Sparkles, FileText, Wrench } from "lucide-react";
+import { VoiceStyleSlidersCard } from "@/components/voice-style-sliders-card";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { MessageSquare, Sparkles, FileText, Wrench, ChevronRight } from "lucide-react";
 
 type PromptSection = {
   id: string;
@@ -36,6 +38,7 @@ export function PersonalityTabs({
   toolDescriptions,
 }: PersonalityTabsProps) {
   const [activeTab, setActiveTab] = useState(TAB_TONES);
+  const perms = usePermissions();
   const hasPromptContent = promptSections.length > 0 || toolDescriptions.length > 0;
 
   return (
@@ -123,6 +126,25 @@ export function PersonalityTabs({
               <PersonalityToneList tones={tones} />
             )}
           </section>
+
+          {/* Collapsible: Voice style sliders (global) */}
+          <details className="group rounded-lg border border-border bg-card">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden />
+              Voice style sliders
+            </summary>
+            <div className="border-t border-border px-4 py-3">
+              <p className="mb-3 text-xs text-muted-foreground">
+                Weights fine-tune how much the parrot leans into each trait. Save to apply; the agent picks them up on next config refresh or restart.
+              </p>
+              <VoiceStyleSlidersCard
+                scope="global"
+                title="Global voice style"
+                description="Weights applied after the Voice block in the system prompt. Use for general tone."
+                canEdit={perms.canEdit}
+              />
+            </div>
+          </details>
         </div>
       )}
 
@@ -154,6 +176,25 @@ export function PersonalityTabs({
               <ToolDescriptionsList tools={toolDescriptions} />
             </section>
           )}
+
+          {/* Collapsible: When using tools (voice style sliders) */}
+          <details className="group rounded-lg border border-border bg-card">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden />
+              Voice style when using tools
+            </summary>
+            <div className="border-t border-border px-4 py-3">
+              <p className="mb-3 text-xs text-muted-foreground">
+                Tone weights applied after the tools section (when confirming after polls, roasts, timer, voice, echo, search). Save to apply.
+              </p>
+              <VoiceStyleSlidersCard
+                scope="tools"
+                title="When using tools"
+                description="Weights applied after the tools section. Leave at default to match global."
+                canEdit={perms.canEdit}
+              />
+            </div>
+          </details>
         </div>
       )}
     </div>

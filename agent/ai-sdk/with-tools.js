@@ -3,12 +3,12 @@
  * Use this for @mention or other flows where the model should be able to
  * trigger roasts, analysis, polls, research, etc. via tool calls.
  *
- * Requires: ai, @ai-sdk/openai, zod
- * Env: OPENAI_API_KEY (required). Optional: OPENAI_MODEL (default gpt-4o), TAVILY_API_KEY (for search_web research).
+ * Requires: ai, @ai-sdk/openai, @ai-sdk/anthropic, zod
+ * Env: OPENAI_API_KEY (OpenAI models) or ANTHROPIC_API_KEY (Claude models). Optional: OPENAI_MODEL (overrides default). Default model: claude-sonnet-4-5. TAVILY_API_KEY (for search_web research).
  */
 
 const { generateText, tool } = require('ai');
-const { openai } = require('@ai-sdk/openai');
+const { getModel } = require('./model-provider');
 const z = require('zod');
 
 const roastConfig = require('../config/roast');
@@ -22,7 +22,7 @@ const { scheduleTimer } = require('../abilities/timer');
 const { check: checkTimerCreationLimit, record: recordTimerCreation } = require('../abilities/timer/rateLimit');
 const { playInVoiceChannel } = require('../abilities/voice');
 const { generateHollaResponse, FALLBACK_PHRASE } = require('../abilities/voice/holla');
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
+const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'claude-sonnet-4-5';
 
 const LOG_PREFIX = '[Parrott tools]';
 const MAX_STEPS = 5;
@@ -419,10 +419,13 @@ function buildTools(context = {}) {
             parameters: z.object({}),
             execute: async () => {
                 const sections = parrotConfig.getSystemPromptSections();
-                return {
+                const out = {
                     role: sections.role ?? '',
                     voice: sections.voice ?? '',
                 };
+                if (sections.voiceWeights) out.voiceWeights = sections.voiceWeights;
+                if (sections.toolVoiceWeights) out.toolVoiceWeights = sections.toolVoiceWeights;
+                return out;
             },
         }),
     };
@@ -437,15 +440,8 @@ function buildTools(context = {}) {
  * @returns {Promise<{ text: string, steps?: Array }>}
  */
 async function chatWithTools(messages, context = {}, options = {}) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey || !apiKey.trim()) {
-        const err = new Error('OpenAI API key not configured');
-        err.code = 'NO_API_KEY';
-        throw err;
-    }
-
     const modelId = options.model ?? DEFAULT_MODEL;
-    const model = openai(modelId);
+    const model = getModel(modelId);
     const tools = buildTools(context);
     const maxTokens = options.maxTokens ?? roastConfig.max_completion_tokens ?? 256;
 
