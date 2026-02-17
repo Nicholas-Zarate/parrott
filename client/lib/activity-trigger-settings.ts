@@ -8,7 +8,7 @@ import { SCENARIO_ORDER } from "@/lib/activity-scenarios";
 
 const TABLE = "activity_trigger_settings";
 
-/** Default cooldown (minutes) per trigger when no row exists. Matches agent/config/activity.js. */
+/** Cooldown (minutes) used only for UI placeholder when a trigger type has no row in DB (fromDb: false). Not used as runtime fallback. */
 export const DEFAULT_COOLDOWN_MINUTES: Record<string, number> = {
   game_start: 90,
   late_night: 360,
@@ -77,8 +77,8 @@ function defaultSetting(triggerType: string): ScenarioSetting {
 }
 
 /**
- * Fetch app-default rows (guild_id IS NULL) and return one ScenarioSetting per trigger type.
- * Missing trigger types get file-style defaults.
+ * Fetch app-default rows (guild_id IS NULL) from Supabase and return one ScenarioSetting per trigger type.
+ * Rows from DB have fromDb: true. Missing trigger types get a UI-only placeholder (fromDb: false); run migration 029 to seed.
  */
 export async function fetchAppDefaultSettings(): Promise<ScenarioSetting[]> {
   const supabase = createClient();
@@ -91,14 +91,10 @@ export async function fetchAppDefaultSettings(): Promise<ScenarioSetting[]> {
   if (error) throw new Error(error.message);
 
   const byType = new Map<string, ScenarioSetting>();
-  for (const key of SCENARIO_ORDER) {
-    byType.set(key, defaultSetting(key));
-  }
   for (const row of (rows ?? []) as ActivityTriggerSettingRow[]) {
     byType.set(row.trigger_type, rowToSetting(row));
   }
-
-  return SCENARIO_ORDER.map((key) => byType.get(key)!);
+  return SCENARIO_ORDER.map((key) => byType.get(key) ?? defaultSetting(key));
 }
 
 /**

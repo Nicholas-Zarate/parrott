@@ -1,10 +1,9 @@
 /**
- * Activity settings resolver: file fallback, DB row normalization, getResolvedSettings.
+ * Activity settings resolver: DB only, fromRow normalization, getResolvedSettings returns null when no row.
  * Run from agent/: node test/activity-settings-resolver.test.js
- * No Supabase required for these tests (they cover file fallback and fromRow shape).
+ * No Supabase required for "no DB" tests (getResolvedSettings returns null).
  */
 const assert = require('assert');
-const activityConfig = require('../config/activity');
 
 let passed = 0;
 let failed = 0;
@@ -37,36 +36,9 @@ async function testAsync(name, fn) {
 
 console.log('Activity settings resolver tests:');
 
-const { fromFile, fromRow, getResolvedSettings } = require('../activity/settings-resolver');
+const { fromRow, getResolvedSettings } = require('../activity/settings-resolver');
 
 const REQUIRED_KEYS = ['enabled', 'cooldownMinutes', 'deliverChannel', 'deliverDm', 'deliverVoice', 'channelNameOverride', 'config'];
-
-// --- fromFile ---
-test('fromFile returns object with all required keys', () => {
-    const out = fromFile('game_start');
-    for (const k of REQUIRED_KEYS) {
-        assert(out.hasOwnProperty(k), `missing key: ${k}`);
-    }
-});
-
-test('fromFile game_start matches file config', () => {
-    const out = fromFile('game_start');
-    assert.strictEqual(out.enabled, activityConfig.triggers.game_start.enabled);
-    assert.strictEqual(out.cooldownMinutes, activityConfig.triggers.game_start.cooldownMinutes);
-    assert.strictEqual(out.deliverChannel, true);
-    assert.strictEqual(out.deliverDm, activityConfig.dmUser);
-    assert.strictEqual(out.deliverVoice, activityConfig.voiceIfConnected);
-    assert.strictEqual(out.channelNameOverride, null);
-    assert(typeof out.config === 'object' && out.config !== null);
-});
-
-test('fromFile unknown trigger type returns safe defaults', () => {
-    const out = fromFile('unknown_trigger');
-    assert.strictEqual(out.enabled, true);
-    assert.strictEqual(out.cooldownMinutes, 90);
-    assert.strictEqual(out.deliverChannel, true);
-    assert.strictEqual(out.channelNameOverride, null);
-});
 
 // --- fromRow ---
 test('fromRow normalizes DB row to camelCase shape', () => {
@@ -87,6 +59,7 @@ test('fromRow normalizes DB row to camelCase shape', () => {
     assert.strictEqual(out.deliverVoice, true);
     assert.strictEqual(out.channelNameOverride, 'go-live-alerts');
     assert.deepStrictEqual(out.config, { startHour: 22 });
+    for (const k of REQUIRED_KEYS) assert(out.hasOwnProperty(k), `missing key: ${k}`);
 });
 
 test('fromRow handles deliver_channel false', () => {
@@ -94,24 +67,28 @@ test('fromRow handles deliver_channel false', () => {
     assert.strictEqual(out.deliverChannel, false);
 });
 
-// --- getResolvedSettings (no Supabase = file fallback) ---
+// --- getResolvedSettings (no Supabase = null) ---
 (async () => {
-    await testAsync('getResolvedSettings returns file-based settings when no DB', async () => {
+    await testAsync('getResolvedSettings returns null when no Supabase', async () => {
         const origUrl = process.env.SUPABASE_URL;
         delete process.env.SUPABASE_URL;
         try {
             const resolved = await getResolvedSettings('123456789', 'go_live');
-            assert.strictEqual(resolved.enabled, activityConfig.triggers.go_live.enabled);
-            assert.strictEqual(resolved.cooldownMinutes, activityConfig.triggers.go_live.cooldownMinutes);
-            for (const k of REQUIRED_KEYS) assert(resolved.hasOwnProperty(k), `missing ${k}`);
+            assert.strictEqual(resolved, null, 'returns null when Supabase not configured');
         } finally {
             if (origUrl !== undefined) process.env.SUPABASE_URL = origUrl;
         }
     });
 
-    await testAsync('getResolvedSettings(null, triggerType) returns file fallback', async () => {
-        const resolved = await getResolvedSettings(null, 'comeback');
-        assert.strictEqual(resolved.cooldownMinutes, activityConfig.triggers.comeback.cooldownMinutes);
+    await testAsync('getResolvedSettings(null, triggerType) returns null when no Supabase', async () => {
+        const origUrl = process.env.SUPABASE_URL;
+        delete process.env.SUPABASE_URL;
+        try {
+            const resolved = await getResolvedSettings(null, 'comeback');
+            assert.strictEqual(resolved, null);
+        } finally {
+            if (origUrl !== undefined) process.env.SUPABASE_URL = origUrl;
+        }
     });
 
     console.log(`\nActivity settings resolver tests: ${passed} passed, ${failed} failed`);

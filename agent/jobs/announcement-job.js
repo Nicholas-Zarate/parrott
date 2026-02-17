@@ -7,7 +7,7 @@
  */
 
 const { generateText } = require('ai');
-const { getModel, DEFAULT_MODEL } = require('../ai-sdk/model-provider');
+const { getModel } = require('../ai-sdk/model-provider');
 const parrotConfig = require('../config/parrot');
 const { getConversationsForPeriod } = require('../supabase/conversation-history');
 const { insertAnnouncement } = require('../supabase/announcements');
@@ -130,9 +130,9 @@ async function generateAndSaveAnnouncement(options = {}) {
         `Total conversations: ${count}. Write your 1–3 sentence rundown now (mention the day of the week).`,
     ].join('\n');
 
-    // 3. Call LLM (no tools, single completion). Uses same model as parrot config when set.
-    const modelId = parrotConfig.model || DEFAULT_MODEL;
-    console.log(`${LOG} Using model "${modelId}" for announcement rundown.`);
+    // 3. Call LLM (no tools, single completion). Model from Supabase (parrot_runtime_config); model-provider default when not set.
+    const modelId = parrotConfig.model;
+    console.log(`${LOG} Using model "${modelId ?? '(model-provider default)'}" for announcement rundown.`);
     let rundownText;
     try {
         const model = getModel(modelId);

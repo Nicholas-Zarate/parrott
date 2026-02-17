@@ -64,6 +64,10 @@ async function onMention(message, client) {
     const previousTurn = await getPreviousTurnForParrot(message, client.user);
     // VC tone (2/3 words) disabled; always use text tone. Re-enable by passing inVoiceContext from member.voice.channel (see PLAN_VC_TOOL_HOLLA_SAY.md).
     const systemPrompt = parrotConfig.getSystemPromptWithTools({});
+    if (!parrotConfig.getTones() || !systemPrompt?.trim()) {
+        await message.reply("Personality isn't configured yet; check the Personality page and Supabase.").catch(() => null);
+        return;
+    }
     const messages = [
         { role: 'system', content: systemPrompt },
         ...(previousTurn
@@ -89,7 +93,7 @@ async function onMention(message, client) {
     try {
         const { text, steps } = await chatWithTools(messages, { message, client }, {
             model: parrotConfig.model,
-            maxTokens: Math.max(parrotConfig.max_completion_tokens ?? 150, 400)
+            maxTokens: Math.max(parrotConfig.max_completion_tokens ?? 256, 400),
         });
         const finalContent = text?.trim() || 'SQUAWK.';
         await replyMsg.edit(finalContent);

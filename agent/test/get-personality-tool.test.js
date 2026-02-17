@@ -11,7 +11,7 @@ async function run() {
     assert(tools.get_personality, 'buildTools() includes get_personality');
 
     const expected = parrotConfig.getSystemPromptSections();
-    assert(expected.role && expected.voice, 'getSystemPromptSections() has role and voice');
+    assert('role' in expected && 'voice' in expected, 'getSystemPromptSections() has role and voice keys');
 
     const t = tools.get_personality;
     assert(typeof t.execute === 'function', 'get_personality tool has execute');
@@ -19,8 +19,8 @@ async function run() {
     const result = await t.execute({});
     assert(result && typeof result === 'object', 'execute() returns object');
     assert('role' in result && 'voice' in result, 'result has role and voice');
-    assert.strictEqual(result.role, expected.role, 'result.role matches getSystemPromptSections().role');
-    assert.strictEqual(result.voice, expected.voice, 'result.voice matches getSystemPromptSections().voice');
+    assert.strictEqual(result.role, expected.role ?? '', 'result.role matches getSystemPromptSections().role');
+    assert.strictEqual(result.voice, expected.voice ?? '', 'result.voice matches getSystemPromptSections().voice');
     if (expected.voiceWeights) assert.strictEqual(result.voiceWeights, expected.voiceWeights, 'result.voiceWeights matches when present');
     if (expected.toolVoiceWeights) assert.strictEqual(result.toolVoiceWeights, expected.toolVoiceWeights, 'result.toolVoiceWeights matches when present');
 

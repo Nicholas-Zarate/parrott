@@ -8,7 +8,7 @@
  */
 
 const { generateText, tool } = require('ai');
-const { getModel, DEFAULT_MODEL } = require('./model-provider');
+const { getModel } = require('./model-provider');
 const z = require('zod');
 
 const roastConfig = require('../config/roast');
@@ -35,20 +35,10 @@ const SEARCH_SNIPPET_MAX_LEN = 400;
  * @param {Object} context - { message, client } (Discord context for resolving guild, replying, etc.)
  * @returns {Object} tools map for generateText
  */
-const DEFAULT_TOOL_DESCRIPTIONS = {
-    run_roast: 'Generate a short roast for a Discord user based on their recent messages. Use when the user asks to roast someone or to "roast @user", or when they confirm (e.g. "yes") after you offered to roast. When the user @mentions someone (or confirmed roasting them), the user message or a previous user message in the conversation will include a line "Mentioned users in this message: @Name (id NUMBER)"—use that NUMBER as targetUserId. Do not ask the user for the ID when it appears in that line. Uses last 7 days and server scope by default.',
-    search_web: 'Search the web for current information, facts, or research. Use when the user asks to look something up, research a topic, get recent news, find facts, says "find out" (e.g. find out about X), or "search online". Also use when they ask for technical implementations, technical or performance upgrades, how to improve or beat something (e.g. "how would you beat X", "what would you add to yourself", "what technical implementations"), or comparisons to other products/people—search first, then answer from the results. Returns titles, URLs, and short snippets.',
-    create_hearing_poll: 'Create a hearing poll (like /vote_hearing): anyone can add options then vote. Use when the user says: create a hearing poll, vote_hearing, vote hearing, run a hearing, do a hearing, or "poll where people can add options". Pass question (required), duration in minutes (use 0 for no limit), and anonymous (false for public votes).',
-    create_timer: 'Set a timer or reminder. Use when the user says: remind me, remind me in X minutes, set a timer for X, make a timer for X, etc. Pass durationMinutes (1–1440) when the user gave a time; pass 0 when they did NOT say how long (tool will tell you to ask) or when isPopeyesTimer is true. If the user says it\'s a Popeyes timer (or says yes when you ask "This a Popeyes timer?"), pass isPopeyesTimer true and durationMinutes 0—the tool will use 10 min + random 2–15 min. Optional reminder text; replyInChannel true to post in channel when it fires, false to DM.',
-    join_voice_and_squawk: 'Join the user\'s voice channel and speak via text-to-speech, then leave. Use for: (1) "holla at me" — pass empty customMessage; a short greeting (or occasionally a game-based line) is generated and spoken. (2) "say <phrase>" — pass the phrase in customMessage; that phrase is spoken. (3) When the user asks you to respond in voice chat / say it in VC / speak in voice — generate your response first, then pass it as customMessage so it is spoken. Do not reply in chat asking for clarification or a "cleaner" version; either use their wording or a funny/witty alternative you choose, then call this tool. They must be in a voice channel. If you previously offered an alternative phrase (e.g. a neutral version) and the user agrees (e.g. says "yes"), call this tool with that phrase in customMessage. Do NOT use for echo/repeat (use echo tool for that).',
-    echo: 'Echo back a short message in chat only. Use ONLY when they say "echo" or "repeat" (e.g. "echo this", "repeat after me"). Do NOT use echo when they say "say"—for "say X" use join_voice_and_squawk with customMessage X so it is spoken in voice.',
-    get_personality: 'Return your current personality: Role and Voice Style only. Use when the user asks what your personality is, what your role or voice style is, how you\'re supposed to act or sound, to describe yourself (as a bot), to "spit back" or "read back" your personality, or to show your role and voice / system prompt (personality parts). Call this tool to fetch the current role and voice text; then summarize or read it back in character briefly—unless they asked for the raw or exact wording.',
-};
-
+/** Tool descriptions come from Supabase (parrot_tool_descriptions) only; empty string when missing. */
 function getToolDescription(toolSlug) {
     const fromDb = parrotConfig.getToolDescriptions()[toolSlug];
-    if (fromDb != null && String(fromDb).trim()) return String(fromDb).trim();
-    return DEFAULT_TOOL_DESCRIPTIONS[toolSlug] || '';
+    return (fromDb != null && String(fromDb).trim()) ? String(fromDb).trim() : '';
 }
 
 function buildTools(context = {}) {
@@ -438,11 +428,11 @@ function buildTools(context = {}) {
  * @returns {Promise<{ text: string, steps?: Array }>}
  */
 async function chatWithTools(messages, context = {}, options = {}) {
-    const modelId = options.model ?? DEFAULT_MODEL;
-    console.log(`${LOG_PREFIX} chatWithTools using model "${modelId}"`);
+    const modelId = options.model ?? parrotConfig.model;
+    console.log(`${LOG_PREFIX} chatWithTools using model "${modelId ?? '(model-provider default)'}"`);
     const model = getModel(modelId);
     const tools = buildTools(context);
-    const maxTokens = options.maxTokens ?? roastConfig.max_completion_tokens ?? 256;
+    const maxTokens = options.maxTokens ?? parrotConfig.max_completion_tokens ?? roastConfig.max_completion_tokens ?? 256;
 
     const result = await generateText({
         model,
