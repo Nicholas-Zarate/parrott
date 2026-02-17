@@ -21,6 +21,10 @@ const MODEL_OPTIONS: { value: string; label: string }[] = [
   { value: "gpt-4o", label: "OpenAI: gpt-4o" },
   { value: "gpt-4o-mini", label: "OpenAI: gpt-4o-mini" },
   { value: "claude-sonnet-4-5", label: "Anthropic: Claude Sonnet 4.5" },
+  { value: "grok-3", label: "xAI: Grok 3" },
+  { value: "grok-3-mini", label: "xAI: Grok 3 Mini" },
+  { value: "grok-4-0709", label: "xAI: Grok 4" },
+  { value: "grok-4-1-fast-reasoning", label: "xAI: Grok 4.1 Fast (reasoning)" },
 ];
 
 type ModelState =

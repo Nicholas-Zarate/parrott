@@ -133,6 +133,7 @@ async function generateAndSaveAnnouncement(options = {}) {
 
     // 3. Call LLM (no tools, single completion). Uses same model as parrot config when set.
     const modelId = parrotConfig.model || DEFAULT_MODEL;
+    console.log(`${LOG} Using model "${modelId}" for announcement rundown.`);
     let rundownText;
     try {
         const model = getModel(modelId);

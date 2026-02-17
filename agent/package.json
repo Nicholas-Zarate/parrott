@@ -10,6 +10,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",
     "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/xai": "^1.0.0",
     "@discordjs/opus": "^0.10.0",
     "@discordjs/voice": "^0.19.0",
     "@snazzah/davey": "^0.1.9",

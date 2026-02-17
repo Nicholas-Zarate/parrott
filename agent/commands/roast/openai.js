@@ -37,7 +37,7 @@ function resolveSystemPrompt(config, defaults) {
  * @throws {Error} With code and optionally status set.
  */
 function normalizeProviderError(err) {
-    if (err.code === 'NO_OPENAI_API_KEY' || err.code === 'NO_ANTHROPIC_API_KEY') {
+    if (err.code === 'NO_OPENAI_API_KEY' || err.code === 'NO_ANTHROPIC_API_KEY' || err.code === 'NO_XAI_API_KEY') {
         throw err;
     }
     const msg = (err.message || '').toLowerCase();
@@ -79,6 +79,7 @@ function normalizeProviderError(err) {
  */
 async function requestRoast(userDataText, config = roastConfig) {
     const modelId = config.model ?? roastConfig.model;
+    console.log('[Roast] requestRoast using model "%s"', modelId);
     const userContent = (config.userPromptTemplate || roastConfig.userPromptTemplate)
         .replace(/\{\{USER_DATA\}\}/g, userDataText);
     const systemContent = resolveSystemPrompt(config, roastConfig);
@@ -139,8 +140,11 @@ function getOpenAIErrorMessage(err) {
     if (err.code === 'NO_ANTHROPIC_API_KEY') {
         return 'Anthropic API key not configured. Set ANTHROPIC_API_KEY in your environment or .env.';
     }
+    if (err.code === 'NO_XAI_API_KEY') {
+        return 'xAI API key not configured. Set XAI_API_KEY in your environment or .env.';
+    }
     if (err.code === 'UNAUTHORIZED' || err.status === 401) {
-        return 'Invalid API key. Check OPENAI_API_KEY or ANTHROPIC_API_KEY for the selected model.';
+        return 'Invalid API key. Check OPENAI_API_KEY, ANTHROPIC_API_KEY, or XAI_API_KEY for the selected model.';
     }
     if (err.code === 'RATE_LIMIT' || err.status === 429) {
         return 'Rate limit; try again in a moment.';

@@ -9,6 +9,7 @@ const {
     formatMessageForParrot,
     getMentionedUsersLineForParrot,
     buildUserContentForParrot,
+    getPreviousTurnForParrot,
 } = require('../abilities/mention/format');
 
 let passed = 0;
@@ -195,6 +196,38 @@ test('buildUserContentForParrot: includes mentioned-users line when message has 
     const out = await buildUserContentForParrot(message, null);
     assert(out.includes('Mentioned users in this message:'), out);
     assert(out.includes('@HOgs_tooth') && out.includes('id 111'), out);
+});
+
+test('getPreviousTurnForParrot: previous user message with @mention includes Mentioned users line', async () => {
+    const userMsgWithMention = {
+        id: '1',
+        content: ' roast <@111> ',
+        author: { id: 'author1', bot: false, displayName: 'swim', username: 'swim', tag: 'swim#0' },
+        channel: { name: 'general', parent: null },
+        mentions: { users: new Map([['111', { username: 'Hogs_tooth', tag: 'Hogs_tooth#1' }]]) },
+        guild: null,
+    };
+    const botReply = {
+        id: '2',
+        content: 'Want me to roast Hogs_tooth?',
+        author: { id: 'bot99', bot: true },
+    };
+    const currentMessage = {
+        id: '3',
+        channel: {
+            messages: {
+                fetch: async ({ before } = {}) => {
+                    if (before === '3') return new Map([['2', botReply], ['1', userMsgWithMention]]);
+                    return new Map();
+                },
+            },
+        },
+    };
+    const botUser = { id: 'bot99' };
+    const turn = await getPreviousTurnForParrot(currentMessage, botUser);
+    assert(turn !== null, 'previous turn should be found');
+    assert(turn.userContent.includes('Mentioned users in this message:'), turn.userContent);
+    assert(turn.userContent.includes('id 111'), turn.userContent);
 });
 
 console.log(`\nTotal: ${passed} passed, ${failed} failed`);

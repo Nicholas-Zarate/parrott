@@ -140,7 +140,9 @@ async function getPreviousTurnForParrot(message, botUser = null) {
         const isSecondUser = second.author && !second.author.bot;
         if (!isFirstBot || !isSecondUser) return null;
 
-        const userContent = formatMessageForParrot(second, botUser);
+        let userContent = formatMessageForParrot(second, botUser);
+        const mentionedLine = getMentionedUsersLineForParrot(second, botUser);
+        if (mentionedLine) userContent = userContent + '\n\n' + mentionedLine;
         let assistantContent = (first.content || '').trim();
         if (assistantContent.length > MAX_MESSAGE_CONTENT_LENGTH) {
             assistantContent = assistantContent.slice(0, MAX_MESSAGE_CONTENT_LENGTH) + '…';
