@@ -5,9 +5,12 @@
 
 const { playSquawkInChannel, playInVoiceChannel } = require('./play');
 const { getMostCommonGameInVoiceChannel } = require('./getGameInChannel');
+const { playStallInVoice, getStallMessage } = require('./stall');
 
 module.exports = {
     playSquawkInChannel,
     playInVoiceChannel,
+    playStallInVoice,
+    getStallMessage,
     getMostCommonGameInVoiceChannel,
 };

@@ -135,9 +135,12 @@ function mergeVoiceSettings(overrides = {}) {
  *
  * @param {string} text - Text to speak (e.g. "what ninja, squack, bye")
  * @param {Object} [voiceSettingsOverrides] - Optional overrides: stability, similarity_boost, style, use_speaker_boost, speed (merged with env defaults)
+ * @param {{ logAsError?: boolean }} [opts] - When true, log "generating audio" and "audio ready" at error level (e.g. when speaking a fallback message)
  * @returns {Promise<{ success: true, path: string } | { success: false, error: string }>}
  */
-async function generateAudio(text, voiceSettingsOverrides = {}) {
+async function generateAudio(text, voiceSettingsOverrides = {}, opts = {}) {
+    const logAsError = opts.logAsError === true;
+    const logLine = (msg) => (logAsError ? console.error(msg) : console.log(msg));
     const trimmed = typeof text === 'string' ? text.trim() : '';
     if (!trimmed) {
         return { success: false, error: 'TTS needs some text to speak.' };
@@ -157,7 +160,7 @@ async function generateAudio(text, voiceSettingsOverrides = {}) {
     const fromText = deriveVoiceSettingsFromText(trimmed);
     const voice_settings = mergeVoiceSettings({ ...fromText, ...voiceSettingsOverrides });
     const url = `${ELEVENLABS_BASE}/text-to-speech/${voiceId}?output_format=${OUTPUT_FORMAT}`;
-    console.log(`${LOG_PREFIX} generating audio for text="${textToSpeak.slice(0, 60)}${textToSpeak.length > 60 ? '…' : ''}" (voice_id=${voiceId} stability=${voice_settings.stability} similarity=${voice_settings.similarity_boost} style=${voice_settings.style} speaker_boost=${voice_settings.use_speaker_boost} speed=${voice_settings.speed})`);
+    logLine(`${LOG_PREFIX} generating audio for text="${textToSpeak.slice(0, 60)}${textToSpeak.length > 60 ? '…' : ''}" (voice_id=${voiceId} stability=${voice_settings.stability} similarity=${voice_settings.similarity_boost} style=${voice_settings.style} speaker_boost=${voice_settings.use_speaker_boost} speed=${voice_settings.speed})`);
 
     let res;
     try {
@@ -213,7 +216,7 @@ async function generateAudio(text, voiceSettingsOverrides = {}) {
         return { success: false, error: err?.message || 'Failed to write audio file.' };
     }
 
-    console.log(`${LOG_PREFIX} audio ready ${buffer.length} bytes -> ${path.basename(tempPath)}`);
+    logLine(`${LOG_PREFIX} audio ready ${buffer.length} bytes -> ${path.basename(tempPath)}`);
     return { success: true, path: tempPath };
 }
 

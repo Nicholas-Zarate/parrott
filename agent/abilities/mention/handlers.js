@@ -6,6 +6,10 @@ const parrotConfig = require('../../config/parrot');
 const { getOpenAIErrorMessage } = require('../../commands/roast/openai');
 const { chatWithTools } = require('../../ai-sdk/with-tools');
 const { saveConversation, getToolsCalledFromSteps } = require('../../supabase/conversation-history');
+const { playInVoiceChannel } = require('../voice');
+
+/** Max length of reply text sent to TTS when user asks for "in voice" / "in VC". */
+const VOICE_REPLY_MAX_LEN = 200;
 
 /**
  * Runs when someone mentions the bot in an allowed channel.
@@ -68,6 +72,10 @@ async function onMention(message, client) {
         await message.reply("Personality isn't configured yet; check the Personality page and Supabase.").catch(() => null);
         return;
     }
+    if (!parrotConfig.getTones()?.text) {
+        await message.reply("Text media is disabled. Enable it on the Personality page to use the parrot.").catch(() => null);
+        return;
+    }
     const messages = [
         { role: 'system', content: systemPrompt },
         ...(previousTurn
@@ -97,6 +105,20 @@ async function onMention(message, client) {
         });
         const finalContent = text?.trim() || 'SQUAWK.';
         await replyMsg.edit(finalContent);
+
+        const wantsVoice = /\b(in voice chat|in voice|in vc)\b/i.test(fullUserContent || message.content || '');
+        if (wantsVoice && message.guild) {
+            const member = message.member ?? await message.guild.members.fetch(message.author?.id).catch(() => null);
+            const voiceChannel = member?.voice?.channel;
+            if (voiceChannel) {
+                const textToSpeak = finalContent.length > VOICE_REPLY_MAX_LEN
+                    ? finalContent.slice(0, VOICE_REPLY_MAX_LEN).trim() + '…'
+                    : finalContent;
+                playInVoiceChannel(client, voiceChannel, { type: 'tts', text: textToSpeak }).catch((err) => {
+                    console.error('[Mention] Voice delivery failed:', err?.message || err);
+                });
+            }
+        }
 
         const toolsCalled = getToolsCalledFromSteps(steps);
         await saveConversation({

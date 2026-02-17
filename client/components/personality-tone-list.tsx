@@ -12,7 +12,9 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ExpandableText } from "@/components/expandable-text";
-import { updateToneDescription } from "@/lib/parrot-tones";
+import { updateToneDescription, updateToneActive } from "@/lib/parrot-tones";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { FileText, Mic } from "lucide-react";
 
 export type ParrotTone = {
@@ -79,10 +81,17 @@ type Props = {
 function ToneRow({
   tone,
   onView,
+  canEdit,
+  onToggleActive,
 }: {
   tone: ParrotTone;
   onView: (tone: ParrotTone) => void;
+  canEdit?: boolean;
+  onToggleActive?: (tone: ParrotTone, is_active: boolean) => void;
 }) {
+  const isMediaTone = RESPONSE_TONE_SLUGS.has(tone.slug);
+  const showEnabledSwitch = isMediaTone && canEdit && onToggleActive != null;
+
   return (
     <li className="flex flex-wrap items-center gap-2 px-4 py-3 bg-card hover:bg-muted/30 transition-colors">
       <span className="font-medium text-foreground min-w-[7rem]">
@@ -135,6 +144,19 @@ function ToneRow({
           </Badge>
         )}
       </div>
+      {showEnabledSwitch && (
+        <div className="flex shrink-0 items-center gap-2">
+          <Switch
+            id={`tone-active-${tone.id}`}
+            checked={tone.is_active}
+            onCheckedChange={(checked) => onToggleActive?.(tone, checked)}
+            aria-label={`${tone.is_active ? "Disable" : "Enable"} ${getToneTypeLabel(tone.slug)}`}
+          />
+          <Label htmlFor={`tone-active-${tone.id}`} className="text-xs text-muted-foreground cursor-pointer">
+            {tone.is_active ? "Enabled" : "Disabled"}
+          </Label>
+        </div>
+      )}
       <Button
         variant="outline"
         size="sm"
@@ -197,6 +219,20 @@ export function PersonalityToneList({ tones, canEdit = false }: Props) {
     router.refresh();
   };
 
+  const handleToggleActive = async (tone: ParrotTone, is_active: boolean) => {
+    const { error } = await updateToneActive(tone.id, is_active);
+    if (error) {
+      toast.error("Failed to update: " + error);
+      return;
+    }
+    if (tone.slug === "text" && !is_active) {
+      toast.success("Text media disabled. The parrot won't reply to @mentions until Text is enabled again.");
+    } else {
+      toast.success(is_active ? "Media enabled." : "Media disabled.");
+    }
+    router.refresh();
+  };
+
   return (
     <>
       <div className="space-y-8">
@@ -232,7 +268,13 @@ export function PersonalityToneList({ tones, canEdit = false }: Props) {
             </div>
             <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
               {responseTones.map((tone) => (
-                <ToneRow key={tone.id} tone={tone} onView={openDrawer} />
+                <ToneRow
+                  key={tone.id}
+                  tone={tone}
+                  onView={openDrawer}
+                  canEdit={canEdit}
+                  onToggleActive={handleToggleActive}
+                />
               ))}
             </ul>
           </section>

@@ -57,7 +57,7 @@ export default async function PersonalityPage() {
 
   const [sectionsResult, toolsResult] = await Promise.all([
     supabase.from(TABLE_PROMPT_SECTIONS).select("id, slug, content, description").eq("is_active", true).order("sort_order", { ascending: true, nullsFirst: false }),
-    supabase.from(TABLE_TOOL_DESCRIPTIONS).select("id, tool_slug, description").eq("is_active", true),
+    supabase.from(TABLE_TOOL_DESCRIPTIONS).select("id, tool_slug, description, is_active"),
   ]);
   const promptSections = sectionsResult.error ? [] : (sectionsResult.data ?? []);
   const toolDescriptions = toolsResult.error ? [] : (toolsResult.data ?? []);
@@ -68,7 +68,7 @@ export default async function PersonalityPage() {
         tones={tones}
         allKeywords={allKeywords}
         promptSections={promptSections as { id: string; slug: string; content: string; description: string | null }[]}
-        toolDescriptions={toolDescriptions as { id: string; tool_slug: string; description: string }[]}
+        toolDescriptions={toolDescriptions as { id: string; tool_slug: string; description: string; is_active: boolean }[]}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 /**
  * Fetch tool descriptions from Supabase (parrot_tool_descriptions table).
- * Used when PARROT_TONES_SOURCE=supabase. Returns map of tool_slug -> description.
+ * Returns metadata (description, example_command, enabled) for all tools.
+ * Used for model tool descriptions and introspection 'tools' subtool list (introspection shows enabled/disabled).
  */
 
 const { getClient } = require('./client');
@@ -8,8 +9,8 @@ const { getClient } = require('./client');
 const TABLE = 'parrot_tool_descriptions';
 
 /**
- * Fetch active tool descriptions and return { tool_slug: description, ... }.
- * @returns {Promise<{ [toolSlug: string]: string } | null>} null on error or no client
+ * Fetch all tool metadata: description, example_command, and enabled (is_active) per tool_slug.
+ * @returns {Promise<{ [toolSlug: string]: { description: string, example_command: string, enabled: boolean } } | null>} null on error or no client
  */
 async function getToolDescriptionsFromSupabase() {
     const supabase = getClient();
@@ -17,8 +18,7 @@ async function getToolDescriptionsFromSupabase() {
 
     const { data, error } = await supabase
         .from(TABLE)
-        .select('tool_slug, description')
-        .eq('is_active', true);
+        .select('tool_slug, description, example_command, is_active');
 
     if (error) {
         console.error('[Tool descriptions] Supabase error:', error.message);
@@ -31,7 +31,11 @@ async function getToolDescriptionsFromSupabase() {
     for (const row of data) {
         const slug = row.tool_slug?.trim();
         if (!slug) continue;
-        map[slug] = String(row.description ?? '');
+        map[slug] = {
+            description: String(row.description ?? ''),
+            example_command: row.example_command != null ? String(row.example_command).trim() : '',
+            enabled: row.is_active === true,
+        };
     }
 
     return map;

@@ -22,6 +22,7 @@ type ToolDescription = {
   id: string;
   tool_slug: string;
   description: string;
+  is_active: boolean;
 };
 
 export function PromptSectionsList({ sections }: { sections: PromptSection[] }) {
@@ -93,10 +94,13 @@ export function ToolDescriptionsList({ tools }: { tools: ToolDescription[] }) {
         {tools.map((t) => (
           <li
             key={t.id}
-            className="flex flex-wrap items-center gap-2 px-4 py-3 bg-card hover:bg-muted/30 transition-colors"
+            className={`flex flex-wrap items-center gap-2 px-4 py-3 transition-colors ${t.is_active ? "bg-card hover:bg-muted/30" : "bg-muted/20 hover:bg-muted/40"}`}
           >
             <Badge variant="outline" className="font-mono text-xs">
               {t.tool_slug}
+            </Badge>
+            <Badge variant={t.is_active ? "default" : "secondary"} className="shrink-0 text-xs">
+              {t.is_active ? "Enabled" : "Disabled"}
             </Badge>
             <span className="flex-1 min-w-0 text-sm text-muted-foreground truncate max-w-md">
               {(t.description || "").slice(0, 80)}
@@ -123,6 +127,9 @@ export function ToolDescriptionsList({ tools }: { tools: ToolDescription[] }) {
             <>
               <SheetHeader>
                 <SheetTitle className="font-mono text-base">Tool: {selected.tool_slug}</SheetTitle>
+                <Badge variant={selected.is_active ? "default" : "secondary"} className="w-fit mt-1">
+                  {selected.is_active ? "Enabled" : "Disabled"}
+                </Badge>
               </SheetHeader>
               <div className="px-4 pb-6">
                 <ExpandableText className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">

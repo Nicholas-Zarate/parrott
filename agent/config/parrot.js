@@ -18,8 +18,8 @@ let cachedTones = null;
 /** Cached prompt sections from Supabase (set by refreshPromptConfig()). */
 let cachedPromptSections = null;
 
-/** Cached tool descriptions from Supabase (set by refreshPromptConfig()). */
-let cachedToolDescriptions = null;
+/** Cached tool metadata from Supabase: { [slug]: { description, example_command } }. Set by refreshPromptConfig(). */
+let cachedToolMetadata = null;
 
 /** Cached runtime config from Supabase (set by refreshPromptConfig()). */
 let cachedRuntimeConfig = null;
@@ -104,12 +104,12 @@ async function refreshPromptConfig() {
         cachedPromptSections = null;
     }
 
-    const toolDescs = await getToolDescriptionsFromSupabase();
-    if (toolDescs && Object.keys(toolDescs).length > 0) {
-        cachedToolDescriptions = toolDescs;
-        console.log('[Parrot prompt] Loaded tool descriptions from Supabase:', Object.keys(toolDescs).join(', '));
+    const toolMeta = await getToolDescriptionsFromSupabase();
+    if (toolMeta && Object.keys(toolMeta).length > 0) {
+        cachedToolMetadata = toolMeta;
+        console.log('[Parrot prompt] Loaded tool descriptions from Supabase:', Object.keys(toolMeta).join(', '));
     } else {
-        cachedToolDescriptions = null;
+        cachedToolMetadata = null;
     }
 
     const runtimeConfig = await getRuntimeConfigFromSupabase();
@@ -144,13 +144,23 @@ function getRoastWeights() {
 }
 
 /**
- * Return cached tool descriptions { tool_slug: description }. Empty object if not from DB.
+ * Return cached tool descriptions { tool_slug: description }. Derived from metadata for backward compatibility.
  * @returns {{ [toolSlug: string]: string }}
  */
 function getToolDescriptions() {
-    return cachedToolDescriptions && typeof cachedToolDescriptions === 'object'
-        ? { ...cachedToolDescriptions }
-        : {};
+    if (!cachedToolMetadata || typeof cachedToolMetadata !== 'object') return {};
+    return Object.fromEntries(
+        Object.entries(cachedToolMetadata).map(([k, v]) => [k, (v && v.description) ?? ''])
+    );
+}
+
+/**
+ * Return full tool metadata { tool_slug: { description, example_command } } for introspection 'tools' subtool.
+ * @returns {{ [toolSlug: string]: { description: string, example_command: string } }}
+ */
+function getToolMetadata() {
+    if (!cachedToolMetadata || typeof cachedToolMetadata !== 'object') return {};
+    return { ...cachedToolMetadata };
 }
 
 const systemPromptOrder = ['role', 'voice', 'task', 'constraints'];
@@ -234,6 +244,7 @@ module.exports = {
     refreshPromptConfig,
     getPromptSection,
     getToolDescriptions,
+    getToolMetadata,
     getSystemPromptSections,
     systemPromptOrder,
     systemPromptOrderWithTools,
