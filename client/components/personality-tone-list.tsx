@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +12,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ExpandableText } from "@/components/expandable-text";
+import { updateToneDescription } from "@/lib/parrot-tones";
 import { FileText, Mic } from "lucide-react";
 
 export type ParrotTone = {
@@ -70,6 +73,7 @@ function formatRelative(dateStr: string): string {
 
 type Props = {
   tones: ParrotTone[];
+  canEdit?: boolean;
 };
 
 function ToneRow({
@@ -144,22 +148,53 @@ function ToneRow({
   );
 }
 
-export function PersonalityToneList({ tones }: Props) {
+export function PersonalityToneList({ tones, canEdit = false }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<ParrotTone | null>(null);
+  const [draftDescription, setDraftDescription] = useState("");
+  const [saving, setSaving] = useState(false);
   const { systemPromptBlocks, responseTones, other } = useMemo(
     () => partitionTones(tones),
     [tones]
   );
 
+  // Keep selected in sync with tones (e.g. after router.refresh())
+  useEffect(() => {
+    if (!selected) return;
+    const updated = tones.find((t) => t.id === selected.id);
+    if (updated) setSelected(updated);
+  }, [tones]);
+
   const openDrawer = (tone: ParrotTone) => {
     setSelected(tone);
+    setDraftDescription(tone.description ?? "");
     setOpen(true);
   };
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
-    if (!next) setSelected(null);
+    if (!next) {
+      setSelected(null);
+      setDraftDescription("");
+    }
+  };
+
+  const handleSaveDescription = async () => {
+    if (!selected) return;
+    setSaving(true);
+    const value = draftDescription.trim() || null;
+    const { error, updated_at } = await updateToneDescription(selected.id, value);
+    setSaving(false);
+    if (error) {
+      toast.error("Failed to update description: " + error);
+      return;
+    }
+    toast.success("Description updated.");
+    setSelected((prev) =>
+      prev ? { ...prev, description: value, updated_at: updated_at ?? prev.updated_at } : null
+    );
+    router.refresh();
   };
 
   return (
@@ -264,13 +299,42 @@ export function PersonalityToneList({ tones }: Props) {
                     </Badge>
                   )}
                 </SheetTitle>
-                {selected.description?.trim() && (
+                {!canEdit && selected.description?.trim() && (
                   <p className="text-sm text-muted-foreground pt-1">
                     {selected.description}
                   </p>
                 )}
               </SheetHeader>
               <div className="flex flex-1 flex-col gap-6 px-4 pb-6">
+                <div>
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                    Description
+                  </h3>
+                  {canEdit ? (
+                    <>
+                      <textarea
+                        value={draftDescription}
+                        onChange={(e) => setDraftDescription(e.target.value)}
+                        placeholder="Short description of this tone (optional)"
+                        rows={3}
+                        className="border-input placeholder:text-muted-foreground w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                        aria-label="Tone description"
+                      />
+                      <Button
+                        size="sm"
+                        className="mt-2"
+                        onClick={handleSaveDescription}
+                        disabled={saving || (draftDescription.trim() || null) === (selected.description?.trim() || null)}
+                      >
+                        {saving ? "Saving…" : "Save description"}
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-sm leading-relaxed text-foreground">
+                      {selected.description?.trim() || "—"}
+                    </p>
+                  )}
+                </div>
                 <div>
                   <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Task

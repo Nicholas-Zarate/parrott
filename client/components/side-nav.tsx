@@ -331,19 +331,28 @@ export function DesktopSideNav() {
 
 /**
  * Mobile top-bar + sheet drawer. Visible only on mobile (< md).
+ * Console-style: fixed top bar (no sticky), safe-area aware, left drawer.
  */
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
 
   return (
-    <div className="sticky top-0 z-40 shrink-0 flex md:hidden items-center border-b border-sidebar-border bg-sidebar px-3 py-2">
+    <header
+      className="fixed top-0 left-0 right-0 z-50 md:hidden flex items-center border-b border-sidebar-border bg-sidebar px-3 min-h-14"
+      style={{
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        paddingLeft: "max(0.75rem, env(safe-area-inset-left, 0px))",
+        paddingRight: "max(0.75rem, env(safe-area-inset-right, 0px))",
+      }}
+      aria-label="App bar"
+    >
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-sidebar-foreground"
+            className="h-9 w-9 shrink-0 text-sidebar-foreground -ml-1"
             aria-label="Open navigation"
           >
             <Menu className="size-5" />
@@ -351,17 +360,26 @@ export function MobileNav() {
         </SheetTrigger>
         <SheetContent
           side="left"
-          className="flex w-56 flex-col bg-sidebar p-0"
+          className="flex w-[min(18rem,85vw)] max-w-sm flex-col bg-sidebar p-0 border-sidebar-border"
           showCloseButton={false}
         >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="shrink-0 flex items-center border-b border-sidebar-border px-4 py-3">
+            <div className="shrink-0 flex items-center justify-between border-b border-sidebar-border px-4 py-3 gap-2">
               <span className="text-sm font-semibold text-sidebar-foreground">
                 Parrott
               </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 text-sidebar-foreground"
+                aria-label="Close navigation"
+                onClick={close}
+              >
+                <PanelLeftClose className="size-4" />
+              </Button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2">
               <NavLinks onNavigate={close} />
             </div>
             <div className="shrink-0 border-t border-sidebar-border p-2">
@@ -370,9 +388,9 @@ export function MobileNav() {
           </div>
         </SheetContent>
       </Sheet>
-      <span className="ml-2 text-sm font-semibold text-sidebar-foreground">
+      <span className="ml-2 text-sm font-semibold text-sidebar-foreground truncate">
         Parrott
       </span>
-    </div>
+    </header>
   );
 }
