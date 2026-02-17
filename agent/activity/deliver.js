@@ -8,7 +8,7 @@
  */
 
 const { generateText } = require('ai');
-const { getModel } = require('../ai-sdk/model-provider');
+const { getModel, DEFAULT_MODEL } = require('../ai-sdk/model-provider');
 const parrotConfig = require('../config/parrot');
 const activityConfig = require('../config/activity');
 const { playInVoiceChannel } = require('../abilities/voice');
@@ -18,7 +18,6 @@ const { hasBlockedRole } = require('../abilities/restricted-roles');
 const { getAllowActivityDm } = require('../supabase/user-dm-preferences');
 
 const LOG_PREFIX = '[Activity deliver]';
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'claude-sonnet-4-5';
 
 /** System prompt templates per trigger type, giving the AI context for a short reaction. */
 const TRIGGER_PROMPTS = {
