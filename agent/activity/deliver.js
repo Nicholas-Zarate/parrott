@@ -8,7 +8,7 @@
  */
 
 const { generateText } = require('ai');
-const { getModel, DEFAULT_MODEL } = require('../ai-sdk/model-provider');
+const { getModel } = require('../ai-sdk/model-provider');
 const parrotConfig = require('../config/parrot');
 const activityConfig = require('../config/activity');
 const { playInVoiceChannel } = require('../abilities/voice');
@@ -50,12 +50,16 @@ async function generateMessage(triggerType, context) {
         return getFallbackMessage(triggerType, context);
     }
 
-    const modelId = parrotConfig.model || DEFAULT_MODEL;
+    const modelId = parrotConfig.model;
     const sections = parrotConfig.getSystemPromptSections();
     const systemPrompt = [sections.role, sections.voice, sections.constraints].filter(Boolean).join(' ');
+    if (!systemPrompt.trim()) {
+        console.log(`${LOG_PREFIX} No personality configured; using fallback message for ${triggerType}.`);
+        return getFallbackMessage(triggerType, context);
+    }
     const userPrompt = promptFn(context);
 
-    console.log(`${LOG_PREFIX} Generating AI message for ${triggerType} via model "${modelId}"...`);
+    console.log(`${LOG_PREFIX} Generating AI message for ${triggerType} via model "${modelId ?? '(model-provider default)'}"...`);
     console.log(`${LOG_PREFIX} User prompt: "${userPrompt}"`);
 
     try {
@@ -128,6 +132,10 @@ async function deliver(client, guild, trigger, resolvedSettings) {
     const { triggerType, userId, activityName, activityType, context } = trigger;
 
     const resolved = resolvedSettings ?? await getResolvedSettings(guild.id, triggerType);
+    if (!resolved) {
+        console.log(`${LOG_PREFIX} No settings row for ${triggerType}; skipping delivery.`);
+        return;
+    }
     const channelName = resolved.channelNameOverride ?? activityConfig.channelName;
 
     // Generate the AI message

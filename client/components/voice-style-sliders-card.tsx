@@ -29,12 +29,13 @@ type Props = {
 export function VoiceStyleSlidersCard({ scope, title, description, canEdit }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [hasRow, setHasRow] = useState(false);
   const [values, setValues] = useState<VoiceDimensionsValues>({
-    snarky: DEFAULT_DIMENSIONS.snarky,
-    chill: DEFAULT_DIMENSIONS.chill,
-    witty: DEFAULT_DIMENSIONS.witty,
-    sarcastic: DEFAULT_DIMENSIONS.sarcastic,
-    sassy: DEFAULT_DIMENSIONS.sassy,
+    snarky: 0,
+    chill: 0,
+    witty: 0,
+    sarcastic: 0,
+    sassy: 0,
   });
   const [savedValues, setSavedValues] = useState<VoiceDimensionsValues | null>(null);
 
@@ -42,17 +43,22 @@ export function VoiceStyleSlidersCard({ scope, title, description, canEdit }: Pr
     setLoading(true);
     const row = await fetchVoiceDimensions(scope);
     setLoading(false);
-    const base = row
-      ? {
-          snarky: row.snarky,
-          chill: row.chill,
-          witty: row.witty,
-          sarcastic: row.sarcastic,
-          sassy: row.sassy,
-        }
-      : { ...DEFAULT_DIMENSIONS };
-    setValues(base);
-    setSavedValues(base);
+    if (row) {
+      const base = {
+        snarky: row.snarky,
+        chill: row.chill,
+        witty: row.witty,
+        sarcastic: row.sarcastic,
+        sassy: row.sassy,
+      };
+      setValues(base);
+      setSavedValues(base);
+      setHasRow(true);
+    } else {
+      setValues({ snarky: 0, chill: 0, witty: 0, sarcastic: 0, sassy: 0 });
+      setSavedValues(null);
+      setHasRow(false);
+    }
   }, [scope]);
 
   useEffect(() => {
@@ -89,10 +95,45 @@ export function VoiceStyleSlidersCard({ scope, title, description, canEdit }: Pr
     if (savedValues) setValues(savedValues);
   };
 
+  const handleCreateDefault = async () => {
+    if (!canEdit || saving) return;
+    setSaving(true);
+    const { error } = await saveVoiceDimensions(scope, DEFAULT_DIMENSIONS);
+    setSaving(false);
+    if (error) {
+      toast.error("Failed to create default: " + error);
+      return;
+    }
+    toast.success("Default voice style created. You can adjust sliders and save.");
+    load();
+  };
+
   if (loading) {
     return (
       <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  if (!hasRow) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-4">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        <p className="mt-4 text-sm text-muted-foreground">
+          No configuration for this scope. Create a default row to edit voice style sliders (stored in Supabase).
+        </p>
+        {canEdit && (
+          <Button
+            size="sm"
+            className="mt-3"
+            onClick={handleCreateDefault}
+            disabled={saving}
+          >
+            {saving ? "Creating…" : "Create default"}
+          </Button>
+        )}
       </div>
     );
   }

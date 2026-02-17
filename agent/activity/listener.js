@@ -68,7 +68,11 @@ const processingUsers = new Set();
  * @returns {Promise<boolean>} true if delivered, false if skipped (disabled or cooldown)
  */
 async function processOneTrigger(client, guild, trigger, displayName, resolved) {
-    if (!resolved?.enabled) return false;
+    if (!resolved) {
+        console.log(`${LOG_PREFIX} No settings row for ${trigger.triggerType}; skipping.`);
+        return false;
+    }
+    if (!resolved.enabled) return false;
 
     const { allowed, retryAfterMs } = cooldown.check(trigger.userId, trigger.triggerType, resolved.cooldownMinutes);
     if (!allowed) {

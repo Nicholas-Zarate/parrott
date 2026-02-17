@@ -21,7 +21,7 @@ export type VoiceDimensionsRow = {
   updated_at?: string;
 };
 
-/** Default values when no row exists (match migration seed). */
+/** Values used only when creating a new row via "Create default" in the UI (match migration seed). Not used as display fallback when no row exists. */
 export const DEFAULT_DIMENSIONS: Omit<VoiceDimensionsRow, "scope" | "created_at" | "updated_at"> = {
   snarky: 70,
   chill: 30,

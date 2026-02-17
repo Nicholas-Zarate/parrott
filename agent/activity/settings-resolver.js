@@ -1,32 +1,13 @@
 /**
  * Resolves activity trigger settings for a (guild, triggerType).
- * Order: DB row (guild then app-default) → file config/activity.js.
- * Return shape is the same whether from DB or file so callers stay simple.
+ * Source: Supabase only. Guild row overrides app-default row (guild_id IS NULL).
+ * When no row exists, returns null; callers must skip the trigger or handle accordingly.
  */
 
-const activityConfig = require('../config/activity');
 const { getRow } = require('../supabase/activity-trigger-settings');
 
 /**
- * Build resolved settings from file only (used when no DB row).
- * @param {string} triggerType
- * @returns {object} ResolvedTriggerSettings shape
- */
-function fromFile(triggerType) {
-    const trigger = activityConfig.triggers[triggerType];
-    return {
-        enabled: trigger?.enabled ?? true,
-        cooldownMinutes: trigger?.cooldownMinutes ?? 90,
-        deliverChannel: true,
-        deliverDm: activityConfig.dmUser === true,
-        deliverVoice: activityConfig.voiceIfConnected === true,
-        channelNameOverride: null,
-        config: trigger && typeof trigger === 'object' ? { ...trigger } : {},
-    };
-}
-
-/**
- * Normalize a DB row to the same shape as fromFile (camelCase, consistent types).
+ * Normalize a DB row to ResolvedTriggerSettings shape (camelCase, consistent types).
  * @param {object} row - Raw DB row
  * @returns {object} ResolvedTriggerSettings shape
  */
@@ -43,20 +24,19 @@ function fromRow(row) {
 }
 
 /**
- * Get resolved settings for (guildId, triggerType). DB overrides file; guild row overrides app-default row.
- * When Supabase is unconfigured or no row exists, returns file-based settings (current behavior).
+ * Get resolved settings for (guildId, triggerType). DB only: guild row then app-default row.
+ * When Supabase is unconfigured or no row exists, returns null.
  * @param {string|null} guildId - Discord guild ID
  * @param {string} triggerType - e.g. 'game_start', 'go_live'
- * @returns {Promise<object>} { enabled, cooldownMinutes, deliverChannel, deliverDm, deliverVoice, channelNameOverride, config }
+ * @returns {Promise<object|null>} { enabled, cooldownMinutes, deliverChannel, ... } or null
  */
 async function getResolvedSettings(guildId, triggerType) {
     const row = await getRow(guildId, triggerType);
     if (row) return fromRow(row);
-    return fromFile(triggerType);
+    return null;
 }
 
 module.exports = {
     getResolvedSettings,
-    fromFile,
     fromRow,
 };

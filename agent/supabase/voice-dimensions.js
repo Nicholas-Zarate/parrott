@@ -55,7 +55,12 @@ async function getVoiceDimensionsFromSupabase() {
         .select('scope, snarky, chill, witty, sarcastic, sassy');
 
     if (error) {
-        console.error('[Voice dimensions] Supabase error:', error.message);
+        const missingTable = /schema cache|relation .* does not exist|could not find the table/i.test(error.message);
+        if (missingTable) {
+            console.warn('[Voice dimensions] Table parrot_voice_dimensions not found. Run migration 030_ensure_parrot_voice_dimensions.sql in Supabase SQL Editor.');
+        } else {
+            console.error('[Voice dimensions] Supabase error:', error.message);
+        }
         return {};
     }
 
