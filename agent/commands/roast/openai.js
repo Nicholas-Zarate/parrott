@@ -72,17 +72,34 @@ function normalizeProviderError(err) {
 
 /**
  * Call LLM (via AI SDK) for roast prompt and user data.
- * @param {string} userDataText - Formatted user block (from formatUserDataForLLM).
- * @param {Object} [config] - Override config (default: config/roast.js).
+ * @param {string} userDataText - Formatted user block (from formatUserDataForLLM or formatActivityOnlyForLLM), or empty for custom roast.
+ * @param {Object} [config] - Override config (default: config/roast.js). May include roastType: 'messages'|'game_streak'|'custom', displayName (for custom).
  * @returns {Promise<{ content: string }>}
  * @throws {Error} With code suitable for getRoastErrorMessage() / getOpenAIErrorMessage().
  */
 async function requestRoast(userDataText, config = roastConfig) {
     const modelId = config.model ?? roastConfig.model;
-    console.log('[Roast] requestRoast using model "%s"', modelId);
-    const userContent = (config.userPromptTemplate || roastConfig.userPromptTemplate)
-        .replace(/\{\{USER_DATA\}\}/g, userDataText);
-    const systemContent = resolveSystemPrompt(config, roastConfig);
+    const roastType = config.roastType || 'messages';
+    const displayName = config.displayName != null ? String(config.displayName) : 'someone';
+
+    let systemContent;
+    let userPromptTemplate;
+
+    const typePrompts = roastConfig.roastPromptsByType?.[roastType];
+    if (typePrompts && roastType !== 'messages') {
+        systemContent = typePrompts.systemPrompt || roastConfig.systemPrompt;
+        userPromptTemplate = typePrompts.userPromptTemplate || roastConfig.userPromptTemplate;
+    } else {
+        systemContent = resolveSystemPrompt(config, roastConfig);
+        userPromptTemplate = config.userPromptTemplate || roastConfig.userPromptTemplate;
+    }
+
+    let userContent = userPromptTemplate
+        .replace(/\{\{USER_DATA\}\}/g, userDataText || '')
+        .replace(/\{\{DISPLAY_NAME\}\}/g, displayName);
+
+    console.log('[Roast] requestRoast using model "%s" type=%s', modelId, roastType);
+
     const messages = [
         { role: 'system', content: systemContent },
         { role: 'user', content: userContent }

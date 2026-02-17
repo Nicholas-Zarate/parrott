@@ -143,7 +143,7 @@ export function VoiceStyleSlidersCard({ scope, title, description, canEdit }: Pr
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       <p className="mt-1 text-xs text-muted-foreground">{description}</p>
 
-      <div className="mt-4 space-y-4">
+      <div className="mt-4 max-w-sm space-y-4">
         {SLIDER_LABELS.map(({ key, label }) => (
           <div key={key} className="flex flex-col gap-1">
             <div className="flex justify-between text-xs">

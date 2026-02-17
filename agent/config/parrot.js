@@ -10,6 +10,7 @@ const { getPromptSectionsFromSupabase } = require('../supabase/prompt-sections')
 const { getToolDescriptionsFromSupabase } = require('../supabase/tool-descriptions');
 const { getRuntimeConfigFromSupabase } = require('../supabase/runtime-config');
 const { getVoiceDimensionsFromSupabase, buildWeightsLine } = require('../supabase/voice-dimensions');
+const { getRoastConfigFromSupabase, DEFAULT_WEIGHTS: ROAST_DEFAULT_WEIGHTS } = require('../supabase/roast-config');
 
 /** Cached tones from Supabase (set by refreshTonesCache()). */
 let cachedTones = null;
@@ -25,6 +26,9 @@ let cachedRuntimeConfig = null;
 
 /** Cached voice dimensions from Supabase, keyed by scope: { global: {...}, tools: {...} }. Set by refreshVoiceDimensionsCache(). */
 let cachedVoiceDimensions = null;
+
+/** Cached roast config (type weights + game_streak_min_activities). Set by refreshPromptConfig(). */
+let cachedRoastConfig = null;
 
 /**
  * Return current tones from Supabase cache only. Populated at startup when Supabase is configured; otherwise null.
@@ -117,6 +121,26 @@ async function refreshPromptConfig() {
         cachedRuntimeConfig = null;
         console.log('[Parrot prompt] No runtime config from Supabase.');
     }
+
+    const roastConfig = await getRoastConfigFromSupabase();
+    if (roastConfig && typeof roastConfig === 'object') {
+        cachedRoastConfig = roastConfig;
+        console.log('[Parrot prompt] Loaded roast config from Supabase; weights messages=%s game_streak=%s custom=%s min_activities=%s', roastConfig.weight_messages, roastConfig.weight_game_streak, roastConfig.weight_custom, roastConfig.game_streak_min_activities);
+    } else {
+        cachedRoastConfig = null;
+        console.log('[Parrot prompt] No roast config from Supabase; using in-code defaults.');
+    }
+}
+
+/**
+ * Return roast type weights and game_streak_min_activities. Uses Supabase cache when set; otherwise in-code defaults.
+ * @returns {{ weight_messages: number, weight_game_streak: number, weight_custom: number, game_streak_min_activities: number }}
+ */
+function getRoastWeights() {
+    if (cachedRoastConfig && typeof cachedRoastConfig === 'object') {
+        return { ...cachedRoastConfig };
+    }
+    return { ...ROAST_DEFAULT_WEIGHTS };
 }
 
 /**
@@ -181,6 +205,7 @@ function getSystemPromptWithTools(options = {}) {
 }
 
 module.exports = {
+    getRoastWeights,
     /** Model from Supabase only; null when not set (model-provider uses its default when passed null). */
     get model() {
         const fromDb = cachedRuntimeConfig?.model;

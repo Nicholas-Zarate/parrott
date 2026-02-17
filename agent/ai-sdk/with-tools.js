@@ -14,8 +14,9 @@ const z = require('zod');
 const roastConfig = require('../config/roast');
 const parrotConfig = require('../config/parrot');
 const { requestRoast, getOpenAIErrorMessage } = require('../commands/roast/openai');
-const { formatUserDataForLLM } = require('../commands/roast/format');
+const { formatUserDataForLLM, formatActivityOnlyForLLM } = require('../commands/roast/format');
 const { collectUserDataForRoast } = require('../commands/roast/collect');
+const { chooseRoastType } = require('../commands/roast/choose-type');
 const { createHearingPollInChannel } = require('../commands/poll/create');
 const { TIMER } = require('../config/constants');
 const { scheduleTimer } = require('../abilities/timer');
@@ -84,27 +85,41 @@ function buildTools(context = {}) {
                         channelId,
                     });
 
-                    if (messages.length === 0) {
-                        return {
-                            success: false,
-                            error: `No messages found for that user in the selected scope (${scope}) and last ${days} days.`,
-                        };
+                    const weights = parrotConfig.getRoastWeights();
+                    const roastType = chooseRoastType(weights, {
+                        hasMessages: messages.length > 0,
+                        activityCount: activities.length,
+                    });
+
+                    let userDataText;
+                    const requestConfig = { ...roastConfig, roastType, displayName: profile?.displayName || targetUser.username };
+
+                    if (roastType === 'messages') {
+                        userDataText = formatUserDataForLLM({
+                            userTag: targetUser.tag,
+                            userId: targetUser.id,
+                            profile,
+                            roleNames,
+                            presence,
+                            activities,
+                            messages,
+                            stats,
+                            days,
+                            scope,
+                            messageContextOnly: true,
+                        });
+                    } else if (roastType === 'game_streak') {
+                        userDataText = formatActivityOnlyForLLM({
+                            userTag: targetUser.tag,
+                            displayName: profile?.displayName || targetUser.username,
+                            activities,
+                        });
+                    } else {
+                        userDataText = '';
                     }
 
-                    const userDataText = formatUserDataForLLM({
-                        userTag: targetUser.tag,
-                        userId: targetUser.id,
-                        profile,
-                        roleNames,
-                        presence,
-                        activities,
-                        messages,
-                        stats,
-                        days,
-                        scope,
-                    });
-                    const { content } = await requestRoast(userDataText, roastConfig);
-                    console.log(`${LOG_PREFIX} run_roast success for ${targetUserId}`);
+                    const { content } = await requestRoast(userDataText, requestConfig);
+                    console.log(`${LOG_PREFIX} run_roast success for ${targetUserId} type=${roastType}`);
                     return { success: true, roast: content };
                 } catch (err) {
                     console.error(`${LOG_PREFIX} run_roast error:`, err.message || err, err.detail || '');
