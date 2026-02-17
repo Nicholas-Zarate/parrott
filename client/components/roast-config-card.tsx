@@ -55,7 +55,9 @@ export function RoastConfigCard({ canEdit }: Props) {
   const handleSave = async () => {
     if (!canEdit || !dirty) return;
     setSaving(true);
-    const { error } = await updateRoastConfig(config);
+    const { error } = await updateRoastConfig(config, {
+      previousConfig: savedConfig ?? undefined,
+    });
     setSaving(false);
     if (error) {
       toast.error(error);

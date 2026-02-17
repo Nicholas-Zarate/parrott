@@ -4,6 +4,7 @@
  */
 
 import { createClient } from "@/lib/supabase/client";
+import { logDbAudit } from "@/lib/audit-log";
 
 const TABLE = "parrot_voice_dimensions";
 
@@ -76,12 +77,19 @@ export type VoiceDimensionsValues = {
   sassy: number;
 };
 
+export type SaveVoiceDimensionsOptions = {
+  /** When provided, a db_audit log is written with the diff (old = previousValues, new = values). */
+  previousValues?: VoiceDimensionsValues | null;
+};
+
 /**
  * Upsert dimensions for a scope. Validates 0-100 and returns error message on failure.
+ * When options.previousValues is provided, logs a db_audit entry after success.
  */
 export async function saveVoiceDimensions(
   scope: VoiceScope,
-  values: VoiceDimensionsValues
+  values: VoiceDimensionsValues,
+  options?: SaveVoiceDimensionsOptions
 ): Promise<{ error: string | null }> {
   const payload = {
     scope,
@@ -99,5 +107,22 @@ export async function saveVoiceDimensions(
   });
 
   if (error) return { error: error.message };
+
+  const prev = options?.previousValues;
+  if (prev != null) {
+    const changes = {
+      snarky: { old: prev.snarky, new: payload.snarky },
+      chill: { old: prev.chill, new: payload.chill },
+      witty: { old: prev.witty, new: payload.witty },
+      sarcastic: { old: prev.sarcastic, new: payload.sarcastic },
+      sassy: { old: prev.sassy, new: payload.sassy },
+    };
+    logDbAudit({
+      table: TABLE,
+      operation: "update",
+      scopeOrId: `scope=${scope}`,
+      changes,
+    });
+  }
   return { error: null };
 }

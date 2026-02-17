@@ -5,6 +5,7 @@
  */
 
 const { getClient } = require('./client');
+const { getLogger } = require('./logs');
 
 const TABLE = 'parrot_conversation_history';
 
@@ -70,6 +71,14 @@ async function saveConversation(row) {
         console.error('[DB] Supabase insert error:', error.message);
         return { ok: false, error: error.message };
     }
+    getLogger('audit').info('DB audit: parrot_conversation_history insert', {
+        type: 'db_audit',
+        table: TABLE,
+        operation: 'insert',
+        channel_id: record.channel_id,
+        guild_id: record.guild_id,
+        tools_called: record.tools_called,
+    });
     return { ok: true };
 }
 

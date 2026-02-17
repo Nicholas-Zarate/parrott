@@ -81,7 +81,9 @@ export function VoiceStyleSlidersCard({ scope, title, description, canEdit }: Pr
   const handleSave = async () => {
     if (!dirty || saving || !canEdit) return;
     setSaving(true);
-    const { error } = await saveVoiceDimensions(scope, values);
+    const { error } = await saveVoiceDimensions(scope, values, {
+      previousValues: savedValues ?? undefined,
+    });
     setSaving(false);
     if (error) {
       toast.error("Failed to save voice style: " + error);

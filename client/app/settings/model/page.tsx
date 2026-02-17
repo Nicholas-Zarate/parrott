@@ -56,8 +56,12 @@ export default function ModelPage() {
   }, [perms.loading, load]);
 
   async function handleModelChange(value: string) {
+    const previousModel =
+      state.status === "success" ? (state.model ?? undefined) : undefined;
     setSaving(true);
-    const { error } = await updateRuntimeConfigModel(value);
+    const { error } = await updateRuntimeConfigModel(value, {
+      previousModelId: previousModel,
+    });
     setSaving(false);
     if (error) {
       toast.error(error);

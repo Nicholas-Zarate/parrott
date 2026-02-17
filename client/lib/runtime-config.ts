@@ -4,6 +4,7 @@
  */
 
 import { createClient } from "@/lib/supabase/client";
+import { logDbAudit } from "@/lib/audit-log";
 
 const TABLE = "parrot_runtime_config";
 
@@ -44,20 +45,38 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
   return config;
 }
 
+export type UpdateRuntimeConfigModelOptions = {
+  /** When provided, a db_audit log is written with model old→new. */
+  previousModelId?: string | null;
+};
+
 /**
  * Update the model id in parrot_runtime_config. Caller must be admin (RLS enforces).
+ * When options.previousModelId is provided, logs a db_audit entry after success.
  */
 export async function updateRuntimeConfigModel(
-  modelId: string
+  modelId: string,
+  options?: UpdateRuntimeConfigModelOptions
 ): Promise<{ error: string | null }> {
   const supabase = createClient();
+  const trimmed = modelId.trim();
   const { error } = await supabase
     .from(TABLE)
     .update({
-      value_text: modelId.trim(),
+      value_text: trimmed,
       updated_at: new Date().toISOString(),
     })
     .eq("key", "model");
 
-  return { error: error?.message ?? null };
+  if (error) return { error: error.message };
+  const prev = options?.previousModelId;
+  if (prev !== undefined && prev !== null) {
+    logDbAudit({
+      table: TABLE,
+      operation: "update",
+      scopeOrId: "key=model",
+      changes: { model: { old: prev, new: trimmed } },
+    });
+  }
+  return { error: null };
 }

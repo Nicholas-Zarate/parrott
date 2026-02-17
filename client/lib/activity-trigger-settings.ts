@@ -5,6 +5,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { SCENARIO_ORDER } from "@/lib/activity-scenarios";
+import { logDbAudit } from "@/lib/audit-log";
 
 const TABLE = "activity_trigger_settings";
 
@@ -125,7 +126,31 @@ export async function saveAppDefaultSetting(
 
   if (setting.id) {
     const { error } = await supabase.from(TABLE).update(payload).eq("id", setting.id);
-    return { error: error?.message ?? null };
+    if (error) return { error: error.message };
+    const changes: Record<string, { old: unknown; new: unknown }> = {};
+    if (patch.enabled !== undefined) changes.enabled = { old: setting.enabled, new: payload.enabled };
+    if (patch.deliver_channel !== undefined)
+      changes.deliver_channel = { old: setting.deliverChannel, new: payload.deliver_channel };
+    if (patch.deliver_dm !== undefined)
+      changes.deliver_dm = { old: setting.deliverDm, new: payload.deliver_dm };
+    if (patch.deliver_voice !== undefined)
+      changes.deliver_voice = { old: setting.deliverVoice, new: payload.deliver_voice };
+    if (patch.cooldown_minutes !== undefined)
+      changes.cooldown_minutes = { old: setting.cooldownMinutes, new: payload.cooldown_minutes };
+    if (patch.channel_name_override !== undefined)
+      changes.channel_name_override = {
+        old: setting.channelNameOverride,
+        new: payload.channel_name_override,
+      };
+    if (Object.keys(changes).length > 0) {
+      logDbAudit({
+        table: TABLE,
+        operation: "update",
+        scopeOrId: `trigger=${setting.triggerType}`,
+        changes,
+      });
+    }
+    return { error: null };
   }
 
   const { error } = await supabase.from(TABLE).insert({
@@ -133,5 +158,19 @@ export async function saveAppDefaultSetting(
     trigger_type: setting.triggerType,
     ...payload,
   });
-  return { error: error?.message ?? null };
+  if (error) return { error: error.message };
+  logDbAudit({
+    table: TABLE,
+    operation: "insert",
+    scopeOrId: `trigger=${setting.triggerType}`,
+    changes: {
+      enabled: { old: null, new: payload.enabled },
+      deliver_channel: { old: null, new: payload.deliver_channel },
+      deliver_dm: { old: null, new: payload.deliver_dm },
+      deliver_voice: { old: null, new: payload.deliver_voice },
+      cooldown_minutes: { old: null, new: payload.cooldown_minutes },
+      channel_name_override: { old: null, new: payload.channel_name_override },
+    },
+  });
+  return { error: null };
 }
