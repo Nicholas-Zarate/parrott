@@ -6,7 +6,7 @@
 const { TIMER } = require('../../config/constants');
 const store = require('./store');
 const { hasBlockedRole } = require('../restricted-roles');
-const { getAllowActivityDm } = require('../../supabase/user-dm-preferences');
+const { getAllowActivityDm } = require('../../database/supabase/user-dm-preferences');
 
 const LOG_PREFIX = '[Timer]';
 

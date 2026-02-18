@@ -5,12 +5,12 @@
  * When Supabase URL and key are set, refreshPromptConfig() at startup loads all caches from DB.
  */
 
-const { getParrotTonesFromSupabase } = require('../supabase/parrot-tones');
-const { getPromptSectionsFromSupabase } = require('../supabase/prompt-sections');
-const { getToolDescriptionsFromSupabase } = require('../supabase/tool-descriptions');
-const { getRuntimeConfigFromSupabase } = require('../supabase/runtime-config');
-const { getVoiceDimensionsFromSupabase, buildWeightsLine } = require('../supabase/voice-dimensions');
-const { getRoastConfigFromSupabase, DEFAULT_WEIGHTS: ROAST_DEFAULT_WEIGHTS } = require('../supabase/roast-config');
+const { getParrotTonesFromSupabase } = require('../database/supabase/parrot-tones');
+const { getPromptSectionsFromSupabase } = require('../database/supabase/prompt-sections');
+const { getToolDescriptionsFromSupabase } = require('../database/supabase/tool-descriptions');
+const { getRuntimeConfigFromSupabase } = require('../database/supabase/runtime-config');
+const { getVoiceDimensionsFromSupabase, buildWeightsLine } = require('../database/supabase/voice-dimensions');
+const { getRoastConfigFromSupabase, DEFAULT_WEIGHTS: ROAST_DEFAULT_WEIGHTS } = require('../database/supabase/roast-config');
 
 /** Cached tones from Supabase (set by refreshTonesCache()). */
 let cachedTones = null;

@@ -8,6 +8,7 @@
  */
 
 const { generateText, tool } = require('ai');
+const { ChannelType } = require('discord.js');
 const { getModel, getProviderLabel, DEFAULT_MODEL } = require('./model-provider');
 const z = require('zod');
 
@@ -42,6 +43,52 @@ const SEARCH_SNIPPET_MAX_LEN = 400;
 function getToolDescription(toolSlug) {
     const fromDb = parrotConfig.getToolDescriptions()[toolSlug];
     return (fromDb != null && String(fromDb).trim()) ? String(fromDb).trim() : '';
+}
+
+/**
+ * Resolve the voice channel the member is in. Tries member.voice, then voiceStates cache, then scan of guild voice channels.
+ * @param {import('discord.js').Guild} guild
+ * @param {import('discord.js').GuildMember} member
+ * @returns {import('discord.js').VoiceChannel | null}
+ */
+function resolveVoiceChannelForMember(guild, member) {
+    if (!guild || !member) return null;
+    let channel = member.voice?.channel ?? null;
+    if (channel) return channel;
+    const voiceState = guild.voiceStates?.cache?.get(member.id);
+    if (voiceState?.channel) return voiceState.channel;
+    const channels = guild.channels?.cache;
+    if (!channels) return null;
+    for (const [, ch] of channels) {
+        if (ch.type === ChannelType.GuildVoice && ch.members?.has(member.id)) return ch;
+    }
+    return null;
+}
+
+/**
+ * Resolve the voice channel the member is in, with REST fallback and optional retry.
+ * When cache misses, fetches voice state from Discord API then resolves again; if still null, waits 1.5s and tries once more.
+ * @param {import('discord.js').Guild} guild
+ * @param {import('discord.js').GuildMember} member
+ * @returns {Promise<import('discord.js').VoiceChannel | null>}
+ */
+async function resolveVoiceChannelForMemberWithFetch(guild, member) {
+    let channel = resolveVoiceChannelForMember(guild, member);
+    if (channel) return channel;
+    try {
+        await guild.voiceStates.fetch(member.id);
+        channel = resolveVoiceChannelForMember(guild, member);
+        if (channel) return channel;
+    } catch (_) {
+        // REST may not support fetching another user's voice state; fall through to retry
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+        await guild.voiceStates.fetch(member.id);
+    } catch (_) {
+        /* ignore */
+    }
+    return resolveVoiceChannelForMember(guild, member);
 }
 
 function buildTools(context = {}) {
@@ -392,13 +439,16 @@ function buildTools(context = {}) {
                     return { success: false, error: 'Could not find you in this server.' };
                 }
 
-                const voiceChannel = member.voice?.channel;
+                //  const voiceChannel = member.voice?.channel;
+                const voiceChannel = await resolveVoiceChannelForMemberWithFetch(guild, member);
                 if (!voiceChannel) {
-                    console.log(`${LOG_PREFIX} join_voice_and_squawk skipped: @${authorTag} not in a voice channel`);
+                    const voiceCacheSize = guild.voiceStates?.cache?.size ?? 0;
+                    const userInVoiceCache = !!guild.voiceStates?.cache?.get(message.author.id);
+                    console.log(`${LOG_PREFIX} join_voice_and_squawk skipped: @${authorTag} not in a voice channel (guild=${guild.id} userId=${message.author.id} voiceStatesCacheSize=${voiceCacheSize} userInVoiceCache=${userInVoiceCache})`);
                     return {
                         success: false,
                         error: "You're not in a voice channel. Join a voice channel first, then ask again.",
-                        hint: 'Tell the user to join a voice channel and say the same thing again.',
+                        hint: "Tell the user to join a voice channel and say the same thing again. If they're already in a voice channel, suggest they wait a second and try again.",
                     };
                 }
 
@@ -457,21 +507,16 @@ function buildTools(context = {}) {
                     return { success: false, error: 'Could not find you in this server.' };
                 }
 
-                const voiceChannel = member.voice?.channel;
+                const voiceChannel = await resolveVoiceChannelForMemberWithFetch(guild, member);
                 if (!voiceChannel) {
-                    console.log(`${LOG_PREFIX} sing_song skipped: @${authorTag} not in a voice channel`);
+                    const voiceCacheSize = guild.voiceStates?.cache?.size ?? 0;
+                    const userInVoiceCache = !!guild.voiceStates?.cache?.get(message.author.id);
+                    console.log(`${LOG_PREFIX} sing_song skipped: @${authorTag} not in a voice channel (guild=${guild.id} userId=${message.author.id} voiceStatesCacheSize=${voiceCacheSize} userInVoiceCache=${userInVoiceCache})`);
                     return {
                         success: false,
                         error: "You're not in a voice channel. Join a voice channel first, then ask again.",
-                        hint: 'Tell the user to join a voice channel and say the same thing again.',
+                        hint: "Tell the user to join a voice channel and say the same thing again. If they're already in a voice channel, suggest they wait a second and try again.",
                     };
-                }
-
-                const displayName = member.displayName || message.author?.username || 'you';
-                try {
-                    await playStallInVoice(client, voiceChannel, { template: 'song', userName: displayName });
-                } catch (stallErr) {
-                    console.log(`${LOG_PREFIX} sing_song stall message failed (continuing):`, stallErr?.message || stallErr);
                 }
 
                 const lyricsResult = await getLyricsForSong(songQuery);

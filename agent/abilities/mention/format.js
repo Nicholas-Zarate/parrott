@@ -255,17 +255,20 @@ function getOnlineNowForParrot(guild, botUser = null) {
  *
  * @param {import('discord.js').Message} message - The message that mentioned the bot
  * @param {import('discord.js').User} [botUser] - Bot user (strip mention, label in recent block, exclude from online list)
+ * @param {{ skipRecentMessages?: boolean }} [options] - When skipRecentMessages is true, omit the "recent messages above" block (e.g. for sing requests)
  * @returns {Promise<string>}
  */
-async function buildUserContentForParrot(message, botUser = null) {
+async function buildUserContentForParrot(message, botUser = null, options = {}) {
     const userContext = formatMessageForParrot(message, botUser);
     const parts = [];
     if (message.guild) {
         const onlineLine = getOnlineNowForParrot(message.guild, botUser);
         if (onlineLine) parts.push(onlineLine);
     }
-    const recentBlock = await getRecentMessagesAboveForParrot(message, botUser);
-    if (recentBlock) parts.push(`Recent messages above (newest first):\n${recentBlock}`);
+    if (!options.skipRecentMessages) {
+        const recentBlock = await getRecentMessagesAboveForParrot(message, botUser);
+        if (recentBlock) parts.push(`Recent messages above (newest first):\n${recentBlock}`);
+    }
     parts.push(userContext);
     const mentionedLine = getMentionedUsersLineForParrot(message, botUser);
     if (mentionedLine) parts.push(mentionedLine);

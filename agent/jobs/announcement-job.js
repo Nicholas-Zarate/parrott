@@ -9,8 +9,8 @@
 const { generateText } = require('ai');
 const { getModel } = require('../ai-sdk/model-provider');
 const parrotConfig = require('../config/parrot');
-const { getConversationsForPeriod } = require('../supabase/conversation-history');
-const { insertAnnouncement } = require('../supabase/announcements');
+const { getConversationsForPeriod } = require('../database/supabase/conversation-history');
+const { insertAnnouncement } = require('../database/supabase/announcements');
 
 const LOG = '[Announcement job]';
 const WINDOW_HOURS = Number(process.env.ANNOUNCEMENT_WINDOW_HOURS) || 6;
