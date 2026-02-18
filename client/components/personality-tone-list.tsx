@@ -222,7 +222,14 @@ export function PersonalityToneList({ tones, canEdit = false }: Props) {
   const handleToggleActive = async (tone: ParrotTone, is_active: boolean) => {
     const { error } = await updateToneActive(tone.id, is_active);
     if (error) {
-      toast.error("Failed to update: " + error);
+      const isForbiddenOrNotFound = error.includes("no effect");
+      const isNoSession = error.includes("No session");
+      const message = isNoSession
+        ? "Your sign-in wasn’t sent with this action. Sign in again with Discord and try again."
+        : isForbiddenOrNotFound
+          ? "You don't have permission to change this. Ask an admin for the Editor role in Settings → Team."
+          : "Failed to update: " + error;
+      toast.error(message);
       return;
     }
     if (tone.slug === "text" && !is_active) {
@@ -265,6 +272,11 @@ export function PersonalityToneList({ tones, canEdit = false }: Props) {
               <p className="text-xs text-muted-foreground mt-0.5">
                 How the parrot replies: text chat (word limits, style) and voice channel (TTS).
               </p>
+              {!canEdit && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ask an admin for editor permissions to enable or disable text or voice tones.
+                </p>
+              )}
             </div>
             <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
               {responseTones.map((tone) => (

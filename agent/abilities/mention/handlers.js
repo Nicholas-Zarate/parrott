@@ -64,8 +64,10 @@ async function onMention(message, client) {
         return message.reply('OpenAI not configured. Set OPENAI_API_KEY in your environment or .env.').catch(() => {});
     }
 
-    const fullUserContent = await buildUserContentForParrot(message, client.user);
+    const isSingRequest = /\bsing\s+/i.test(message.content || '');
+    const fullUserContent = await buildUserContentForParrot(message, client.user, { skipRecentMessages: isSingRequest });
     const previousTurn = await getPreviousTurnForParrot(message, client.user);
+    const usePreviousTurn = previousTurn && !isSingRequest;
     // VC tone (2/3 words) disabled; always use text tone. Re-enable by passing inVoiceContext from member.voice.channel (see PLAN_VC_TOOL_HOLLA_SAY.md).
     const systemPrompt = parrotConfig.getSystemPromptWithTools({});
     if (!parrotConfig.getTones() || !systemPrompt?.trim()) {
@@ -78,7 +80,7 @@ async function onMention(message, client) {
     }
     const messages = [
         { role: 'system', content: systemPrompt },
-        ...(previousTurn
+        ...(usePreviousTurn
             ? [
                 { role: 'user', content: previousTurn.userContent },
                 { role: 'assistant', content: previousTurn.assistantContent },

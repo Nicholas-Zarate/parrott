@@ -26,10 +26,11 @@ export async function updateToneDescription(
     .update({ description: description?.trim() || null, updated_at })
     .eq("id", id)
     .select("updated_at")
-    .single();
+    .maybeSingle();
 
   if (error) return { error: error.message };
-  return { error: null, updated_at: data?.updated_at ?? updated_at };
+  if (data == null) return { error: "Update had no effect (forbidden or not found)." };
+  return { error: null, updated_at: data.updated_at ?? updated_at };
 }
 
 export type UpdateToneActiveResult = {
@@ -51,8 +52,9 @@ export async function updateToneActive(
     .update({ is_active, updated_at })
     .eq("id", id)
     .select("updated_at")
-    .single();
+    .maybeSingle();
 
   if (error) return { error: error.message };
-  return { error: null, updated_at: data?.updated_at ?? updated_at };
+  if (data == null) return { error: "Update had no effect (forbidden or not found)." };
+  return { error: null, updated_at: data.updated_at ?? updated_at };
 }

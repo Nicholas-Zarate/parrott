@@ -7,12 +7,37 @@
 
 const TAVILY_SEARCH_URL = 'https://api.tavily.com/search';
 const SEARCH_MAX_RESULTS = 5;
-const LYRIC_MAX_CHARS = 500;
+const LYRIC_MAX_CHARS = 1000;
 const SEARCH_TIMEOUT_MS = 15000;
+
+/** Phrases that indicate a snippet is article/description prose, not actual lyrics. */
+const DESCRIPTION_STARTS = [
+    /^listeners\s+revisit/i,
+    /^the\s+song\s+/i,
+    /^from\s+the\s+(album|unforgettable|hit)/i,
+    /^this\s+track\s+/i,
+    /^iconic\s+lyrics[,.]/i,
+    /^young\s+dro'?s\s+iconic/i,
+    /^the\s+track\s+/i,
+    /^the\s+lyrics\s+/i,
+    /^in\s+this\s+(song|track)/i,
+    /^the\s+artist\s+/i,
+];
+
+/**
+ * True if the text looks like article/description prose rather than actual song lyrics.
+ * @param {string} text - Trimmed snippet or extracted string
+ * @returns {boolean}
+ */
+function looksLikeDescription(text) {
+    if (typeof text !== 'string' || text.length < 20) return false;
+    const start = text.replace(/\s+/g, ' ').trim().slice(0, 120);
+    return DESCRIPTION_STARTS.some((re) => re.test(start));
+}
 
 /**
  * Extract a lyric-like string from search snippet. Prefers quoted text; otherwise takes
- * the start of the snippet up to LYRIC_MAX_CHARS.
+ * the start of the snippet up to LYRIC_MAX_CHARS. Skips snippets that look like descriptions.
  * @param {string} content - Raw snippet from Tavily
  * @returns {string|null} - Extracted lyric or null if nothing usable
  */
@@ -23,16 +48,18 @@ function extractLyricFromSnippet(content) {
     // Prefer content inside double or single quotes (often the actual lyric)
     const doubleQuoted = trimmed.match(/"([^"]+)"/);
     if (doubleQuoted && doubleQuoted[1].trim().length >= 10) {
-        return doubleQuoted[1].trim().slice(0, LYRIC_MAX_CHARS);
+        const lyric = doubleQuoted[1].trim().slice(0, LYRIC_MAX_CHARS);
+        if (!looksLikeDescription(lyric)) return lyric;
     }
     const singleQuoted = trimmed.match(/'([^']+)'/);
     if (singleQuoted && singleQuoted[1].trim().length >= 10) {
-        return singleQuoted[1].trim().slice(0, LYRIC_MAX_CHARS);
+        const lyric = singleQuoted[1].trim().slice(0, LYRIC_MAX_CHARS);
+        if (!looksLikeDescription(lyric)) return lyric;
     }
 
-    // Otherwise use the start of the snippet (may be a lyric line or description)
+    // Otherwise use the start of the snippet only if it doesn't look like description prose
     const cleaned = trimmed.replace(/\s+/g, ' ').trim();
-    if (cleaned.length < 15) return null;
+    if (cleaned.length < 15 || looksLikeDescription(cleaned)) return null;
     return cleaned.slice(0, LYRIC_MAX_CHARS);
 }
 
@@ -97,19 +124,26 @@ async function getLyricsForSong(songQuery) {
             return { success: false, error: "Couldn't find lyrics for that song." };
         }
 
+        // Collect all extractable lyrics, then prefer the longest (so we don't return a short quoted one-liner when a longer verse exists)
+        const candidates = [];
         for (const r of results) {
             const content = r.content || r.snippet || '';
             const lyric = extractLyricFromSnippet(content);
-            if (lyric) {
-                return { success: true, lyric };
+            if (lyric && lyric.length >= 15) {
+                candidates.push(lyric);
             }
         }
+        if (candidates.length > 0) {
+            const best = candidates.reduce((a, b) => (a.length >= b.length ? a : b));
+            return { success: true, lyric: best.slice(0, LYRIC_MAX_CHARS) };
+        }
 
-        // No snippet looked like lyrics; use first result content truncated
-        const firstContent = (results[0].content || results[0].snippet || '').trim();
-        if (firstContent.length >= 15) {
-            const fallback = firstContent.replace(/\s+/g, ' ').trim().slice(0, LYRIC_MAX_CHARS);
-            return { success: true, lyric: fallback };
+        // No snippet looked like lyrics; use first result content truncated only if not description prose
+        for (const r of results) {
+            const firstContent = (r.content || r.snippet || '').trim().replace(/\s+/g, ' ').trim();
+            if (firstContent.length >= 15 && !looksLikeDescription(firstContent)) {
+                return { success: true, lyric: firstContent.slice(0, LYRIC_MAX_CHARS) };
+            }
         }
 
         return { success: false, error: "Couldn't find lyrics for that song." };
