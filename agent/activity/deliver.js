@@ -12,10 +12,10 @@ const { getModel } = require('../ai-sdk/model-provider');
 const parrotConfig = require('../config/parrot');
 const activityConfig = require('../config/activity');
 const { playInVoiceChannel } = require('../abilities/voice');
-const { logActivityEvent } = require('../supabase/activity-listeners');
+const { logActivityEvent } = require('../database/supabase/activity-listeners');
 const { getResolvedSettings } = require('./settings-resolver');
 const { hasBlockedRole } = require('../abilities/restricted-roles');
-const { getAllowActivityDm } = require('../supabase/user-dm-preferences');
+const { getAllowActivityDm } = require('../database/supabase/user-dm-preferences');
 
 const LOG_PREFIX = '[Activity deliver]';
 

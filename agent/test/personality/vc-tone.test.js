@@ -3,8 +3,8 @@
  * Run from agent/: node test/vc-tone.test.js   or   npm test
  */
 const assert = require('assert');
-const parrotConfig = require('../config/parrot');
-const { generateHollaResponse, FALLBACK_PHRASE } = require('../abilities/voice/holla');
+const parrotConfig = require('../../config/parrot');
+const { generateHollaResponse, FALLBACK_PHRASE } = require('../../abilities/voice/holla');
 
 const tones = parrotConfig.getTones();
 // When Supabase not used or cache empty, tones is null; then skip vc assertions

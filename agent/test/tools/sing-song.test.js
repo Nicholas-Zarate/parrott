@@ -1,6 +1,6 @@
 /**
  * sing_song tool and getLyricsForSong helper.
- * Run from agent/: node test/tools/sing-song.test.js
+ * Run from agent/: node tools/sing-song.test.js
  */
 const assert = require('assert');
 const { buildTools } = require('../../ai-sdk/with-tools');

@@ -5,7 +5,7 @@ const { hasBlockedRole } = require('../restricted-roles');
 const parrotConfig = require('../../config/parrot');
 const { getOpenAIErrorMessage } = require('../../commands/roast/openai');
 const { chatWithTools } = require('../../ai-sdk/with-tools');
-const { saveConversation, getToolsCalledFromSteps } = require('../../supabase/conversation-history');
+const { saveConversation, getToolsCalledFromSteps } = require('../../database/supabase/conversation-history');
 const { playInVoiceChannel } = require('../voice');
 
 /** Max length of reply text sent to TTS when user asks for "in voice" / "in VC". */

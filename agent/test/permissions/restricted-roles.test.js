@@ -8,7 +8,7 @@ const {
     getBlockedRoleNames,
     hasBlockedRole,
     resetBlockedRoleNamesCache,
-} = require('../abilities/restricted-roles');
+} = require('../../abilities/restricted-roles');
 
 let passed = 0;
 let failed = 0;
