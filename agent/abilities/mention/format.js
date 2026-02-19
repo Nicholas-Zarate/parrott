@@ -114,7 +114,7 @@ async function getRecentMessagesAboveForParrot(message, botUser = null, options 
         if (lines.length === 0) return '';
         return lines.join('\n');
     } catch (err) {
-        console.error('[Mention] getRecentMessagesAbove error:', err?.message || err);
+        console.error('[Mention Error] getRecentMessagesAbove:', err?.message || err);
         return '';
     }
 }
@@ -150,7 +150,7 @@ async function getPreviousTurnForParrot(message, botUser = null) {
         if (!assistantContent) assistantContent = '(no text)';
         return { userContent, assistantContent };
     } catch (err) {
-        console.error('[Mention] getPreviousTurnForParrot error:', err?.message || err);
+        console.error('[Mention Error] getPreviousTurnForParrot:', err?.message || err);
         return null;
     }
 }

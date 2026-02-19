@@ -16,7 +16,7 @@ const VOICE_REPLY_MAX_LEN = 200;
  * Rate limited per user and per channel tier (unlimited / semi: 5 per 2 min / limited: 1 per 5 min); when over limit replies with resting message and returns.
  * Uses chatWithTools so the parrot can run commands (e.g. create_hearing_poll, run_roast).
  * Expects message to be full (not partial); discord-voting-bot.js fetches partials before calling.
- * Terminal logs: [Mention] and [Parrott tools] for debugging and to guide users when params are missing.
+ * Terminal logs: [Mention] for info, [Mention Error] for errors, [Parrott tools] for tool usage.
  *
  * @param {import('discord.js').Message} message - The message that mentioned the bot
  * @param {import('discord.js').Client} client - The bot client
@@ -96,7 +96,7 @@ async function onMention(message, client) {
     try {
         replyMsg = await message.reply(placeholderText);
     } catch (e) {
-        console.error('[Mention] Failed to send placeholder:', e?.message);
+        console.error('[Mention Error] Failed to send placeholder:', e?.message);
         return;
     }
 
@@ -117,7 +117,7 @@ async function onMention(message, client) {
                     ? finalContent.slice(0, VOICE_REPLY_MAX_LEN).trim() + '…'
                     : finalContent;
                 playInVoiceChannel(client, voiceChannel, { type: 'tts', text: textToSpeak }).catch((err) => {
-                    console.error('[Mention] Voice delivery failed:', err?.message || err);
+                    console.error('[Mention Error] Voice delivery failed:', err?.message || err);
                 });
             }
         }
@@ -133,7 +133,7 @@ async function onMention(message, client) {
             tools_called: toolsCalled,
         });
     } catch (err) {
-        console.error('[Mention] OpenAI/tools error:', err.message || err, err.detail || '');
+        console.error('[Mention Error] OpenAI/tools error:', err.message || err, err.detail || '');
         const userMsg = getOpenAIErrorMessage(err);
         await replyMsg.edit(userMsg).catch(() => {});
     }
