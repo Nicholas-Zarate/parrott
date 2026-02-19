@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { PersonalityToneList, type ParrotTone } from "@/components/personality-tone-list";
-import { PromptSectionsList, ToolDescriptionsList } from "@/components/prompt-config-lists";
+import { PersonalityKeywordsChips } from "./personality-keywords-chips";
+import { ToolDescriptionsList } from "@/components/prompt-config-lists";
 import { VoiceStyleSlidersCard } from "@/components/voice-style-sliders-card";
 import { RoastConfigCard } from "@/components/roast-config-card";
 import { usePermissions } from "@/lib/hooks/use-permissions";
-import { MessageSquare, Sparkles, FileText, Wrench, ChevronRight } from "lucide-react";
+import { MessageSquare, Wrench, ChevronRight } from "lucide-react";
 
 type PromptSection = {
   id: string;
@@ -91,7 +91,7 @@ export function PersonalityTabs({
                   : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
               }`}
             >
-              Prompt & tools
+              Tools
             </button>
           )}
           <button
@@ -111,25 +111,10 @@ export function PersonalityTabs({
       {/* Tab: Tones */}
       {activeTab === TAB_TONES && (
         <div className="flex flex-col gap-4">
-          {allKeywords.length > 0 && (
-            <section className="rounded-lg border border-border bg-muted/20 px-4 py-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Sparkles className="size-4" aria-hidden />
-                Personality keywords
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {allKeywords.map((kw) => (
-                  <Badge
-                    key={kw}
-                    variant="outline"
-                    className="capitalize"
-                  >
-                    {kw.replace(/-/g, " ")}
-                  </Badge>
-                ))}
-              </div>
-            </section>
-          )}
+          <PersonalityKeywordsChips
+            keywords={allKeywords}
+            addEditDisabled
+          />
 
           <section>
             <div className="mb-3 flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -173,7 +158,7 @@ export function PersonalityTabs({
       {/* Tab: Prompt & tools */}
       {activeTab === TAB_PROMPT_TOOLS && hasPromptContent && (
         <div className="flex flex-col gap-6">
-          {promptSections.length > 0 && (
+          {/* {promptSections.length > 0 && (
             <section>
               <div className="mb-3 flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 <FileText className="size-4" aria-hidden />
@@ -184,7 +169,7 @@ export function PersonalityTabs({
               </p>
               <PromptSectionsList sections={promptSections} />
             </section>
-          )}
+          )} */}
 
           {toolsLoadError?.trim() && (
             <section className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3">
