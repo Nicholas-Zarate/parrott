@@ -10,6 +10,7 @@ function handleToolsList() {
         name,
         description: (meta && meta.description) ?? '',
         example: (meta && meta.example_command) ?? '',
+        example_trigger_phrases: (meta && meta.example_trigger_phrases) ?? [],
         enabled: (meta && meta.enabled) !== false,
     }));
     return { tools };
