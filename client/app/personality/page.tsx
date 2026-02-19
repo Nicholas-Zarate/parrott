@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const TABLE_TONES = "parrot_tones";
 const TABLE_PROMPT_SECTIONS = "parrot_prompt_sections";
-const TABLE_TOOL_DESCRIPTIONS = "parrot_tool_descriptions";
+const TABLE_TOOL_DESCRIPTIONS = "tools_meta_data";
 
 export default async function PersonalityPage() {
   const supabase = await createClient();
@@ -61,6 +61,8 @@ export default async function PersonalityPage() {
   ]);
   const promptSections = sectionsResult.error ? [] : (sectionsResult.data ?? []);
   const toolDescriptions = toolsResult.error ? [] : (toolsResult.data ?? []);
+  const toolsLoadError =
+    toolsResult.error?.message ?? (toolsResult.error ? String(toolsResult.error) : null);
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
@@ -69,6 +71,7 @@ export default async function PersonalityPage() {
         allKeywords={allKeywords}
         promptSections={promptSections as { id: string; slug: string; content: string; description: string | null }[]}
         toolDescriptions={toolDescriptions as { id: string; tool_slug: string; description: string; is_active: boolean }[]}
+        toolsLoadError={toolsLoadError}
       />
     </div>
   );

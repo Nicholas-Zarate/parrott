@@ -16,18 +16,22 @@ type PromptSection = {
   description: string | null;
 };
 
-type ToolDescription = {
+type ToolMetaData = {
   id: string;
   tool_slug: string;
   description: string;
   is_active: boolean;
+  /** Parameter name -> description (from tools_meta_data.parameter_descriptions jsonb). */
+  parameter_descriptions?: Record<string, string> | null;
 };
 
 type PersonalityTabsProps = {
   tones: ParrotTone[];
   allKeywords: string[];
   promptSections: PromptSection[];
-  toolDescriptions: ToolDescription[];
+  toolDescriptions: ToolMetaData[];
+  /** When set, tools fetch failed; show this message in the Prompt & tools tab. */
+  toolsLoadError?: string | null;
 };
 
 const TAB_TONES = "tones";
@@ -39,10 +43,14 @@ export function PersonalityTabs({
   allKeywords,
   promptSections,
   toolDescriptions,
+  toolsLoadError,
 }: PersonalityTabsProps) {
   const [activeTab, setActiveTab] = useState(TAB_TONES);
   const perms = usePermissions();
-  const hasPromptContent = promptSections.length > 0 || toolDescriptions.length > 0;
+  const hasPromptContent =
+    promptSections.length > 0 ||
+    toolDescriptions.length > 0 ||
+    Boolean(toolsLoadError?.trim());
 
   return (
     <div className="flex flex-col gap-4">
@@ -175,6 +183,18 @@ export function PersonalityTabs({
                 Freeform prompt blocks (e.g. tools section). Used when PARROT_TONES_SOURCE=supabase.
               </p>
               <PromptSectionsList sections={promptSections} />
+            </section>
+          )}
+
+          {toolsLoadError?.trim() && (
+            <section className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3">
+              <p className="text-sm font-medium text-destructive">
+                Could not load tool descriptions
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">{toolsLoadError}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Check that the <code className="rounded bg-muted px-1 py-0.5 font-mono">tools_meta_data</code> table exists and RLS allows read access.
+              </p>
             </section>
           )}
 
