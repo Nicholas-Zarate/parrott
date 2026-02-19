@@ -18,7 +18,7 @@ let cachedTones = null;
 /** Cached prompt sections from Supabase (set by refreshPromptConfig()). */
 let cachedPromptSections = null;
 
-/** Cached tool metadata from Supabase: { [slug]: { description, example_command } }. Set by refreshPromptConfig(). */
+/** Cached tool metadata from Supabase: { [slug]: { description, example_command, example_trigger_phrases } }. Set by refreshPromptConfig(). */
 let cachedToolMetadata = null;
 
 /** Cached runtime config from Supabase (set by refreshPromptConfig()). */
@@ -155,8 +155,8 @@ function getToolDescriptions() {
 }
 
 /**
- * Return full tool metadata { tool_slug: { description, example_command } } for introspection 'tools' subtool.
- * @returns {{ [toolSlug: string]: { description: string, example_command: string } }}
+ * Return full tool metadata { tool_slug: { description, example_command, example_trigger_phrases } } for introspection 'tools' subtool.
+ * @returns {{ [toolSlug: string]: { description: string, example_command: string, example_trigger_phrases: string[] } }}
  */
 function getToolMetadata() {
     if (!cachedToolMetadata || typeof cachedToolMetadata !== 'object') return {};
