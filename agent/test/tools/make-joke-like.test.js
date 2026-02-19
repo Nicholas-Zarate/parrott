@@ -1,6 +1,6 @@
 /**
  * make_joke_like tool and getJokeForSubject helper.
- * Run from agent/: node test/tools/make-joke-like.test.js
+ * Run from agent/: node tools/make-joke-like.test.js
  */
 const assert = require('assert');
 const { buildTools } = require('../../ai-sdk/with-tools');

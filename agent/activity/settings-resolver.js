@@ -4,7 +4,7 @@
  * When no row exists, returns null; callers must skip the trigger or handle accordingly.
  */
 
-const { getRow } = require('../supabase/activity-trigger-settings');
+const { getRow } = require('../database/supabase/activity-trigger-settings');
 
 /**
  * Normalize a DB row to ResolvedTriggerSettings shape (camelCase, consistent types).

@@ -3,7 +3,7 @@
  * Run from agent/: node test/activity-config.test.js
  */
 const assert = require('assert');
-const config = require('../config/activity');
+const config = require('../../config/activity');
 
 // --- Top-level config ---
 assert(typeof config.channelName === 'string' && config.channelName.length > 0, 'channelName is a non-empty string');

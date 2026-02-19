@@ -1,6 +1,6 @@
 /**
  * Introspection tool: personality, model, and tools subtools.
- * Run from agent/: node test/tools/get-personality-tool.test.js
+ * Run from agent/: node tools/get-personality-tool.test.js
  */
 const assert = require('assert');
 const { buildTools } = require('../../ai-sdk/with-tools');

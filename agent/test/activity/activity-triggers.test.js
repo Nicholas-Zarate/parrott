@@ -4,7 +4,7 @@
  * Run from agent/: node test/activity-triggers.test.js
  */
 const assert = require('assert');
-const { detectAll, getActivityNames } = require('../activity/triggers');
+const { detectAll, getActivityNames } = require('../../activity/triggers');
 
 let passed = 0;
 let failed = 0;

@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { patchConsole } = require('./supabase/logs');
+const { patchConsole } = require('./database/supabase/logs');
 patchConsole();
 
 const { Client, GatewayIntentBits, Partials } = require('discord.js');

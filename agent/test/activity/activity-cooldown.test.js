@@ -3,7 +3,7 @@
  * Run from agent/: node test/activity-cooldown.test.js
  */
 const assert = require('assert');
-const cooldown = require('../activity/cooldown');
+const cooldown = require('../../activity/cooldown');
 
 let passed = 0;
 

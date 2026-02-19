@@ -8,7 +8,7 @@ const {
     extractUserLine,
     buildMetadata,
     SYSTEM_PROMPT,
-} = require('../jobs/announcement-job');
+} = require('../../jobs/announcement-job');
 
 // ─── extractUserLine ─────────────────────────────────────────────
 

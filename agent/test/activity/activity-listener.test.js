@@ -40,8 +40,8 @@ console.log('Activity listener tests:');
 // We test the detectAll + deduplication logic directly since handlePresenceUpdate
 // has async deliver calls that are hard to mock without a framework.
 
-const { detectAll } = require('../activity/triggers');
-const cooldown = require('../activity/cooldown');
+const { detectAll } = require('../../activity/triggers');
+const cooldown = require('../../activity/cooldown');
 
 function mockPresence(userId, opts = {}) {
     const activities = (opts.activities || []).map((a) => ({
@@ -136,7 +136,7 @@ test('cooldown allows different trigger types independently', () => {
 
 // --- Bot filtering ---
 test('listener module exports expected functions', () => {
-    const listener = require('../activity/listener');
+    const listener = require('../../activity/listener');
     assert(typeof listener.handlePresenceUpdate === 'function', 'handlePresenceUpdate exported');
     assert(typeof listener.handleVoiceStateUpdate === 'function', 'handleVoiceStateUpdate exported');
     assert(typeof listener.init === 'function', 'init exported');
@@ -148,7 +148,7 @@ test('listener module exports expected functions', () => {
 
 // --- Deliver module exports ---
 test('deliver module exports expected functions', () => {
-    const deliver = require('../activity/deliver');
+    const deliver = require('../../activity/deliver');
     assert(typeof deliver.deliver === 'function', 'deliver exported');
     assert(typeof deliver.generateMessage === 'function', 'generateMessage exported');
     assert(typeof deliver.findActivityChannel === 'function', 'findActivityChannel exported');
@@ -159,7 +159,7 @@ test('generateMessage returns fallback when no API key', async () => {
     const origKey = process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_API_KEY;
     try {
-        const { generateMessage } = require('../activity/deliver');
+        const { generateMessage } = require('../../activity/deliver');
         const msg = await generateMessage('game_start', { game: 'Arma 3' });
         assert(typeof msg === 'string' && msg.length > 0, 'returns non-empty fallback');
         assert(msg.includes('Arma 3'), 'fallback includes game name');
@@ -180,7 +180,7 @@ test('supabase activity-listeners module exports expected functions', () => {
         const origKey = process.env.OPENAI_API_KEY;
         delete process.env.OPENAI_API_KEY;
         try {
-            const { generateMessage } = require('../activity/deliver');
+            const { generateMessage } = require('../../activity/deliver');
             const msg = await generateMessage('game_start', { game: 'Arma 3' });
             assert(typeof msg === 'string' && msg.length > 0, 'returns non-empty fallback');
             assert(msg.includes('Arma 3'), 'fallback includes game name');
@@ -193,7 +193,7 @@ test('supabase activity-listeners module exports expected functions', () => {
         const origKey = process.env.OPENAI_API_KEY;
         delete process.env.OPENAI_API_KEY;
         try {
-            const { generateMessage } = require('../activity/deliver');
+            const { generateMessage } = require('../../activity/deliver');
             const cases = [
                 ['game_start', { game: 'Test' }],
                 ['late_night', { game: 'Test', hour: 2 }],

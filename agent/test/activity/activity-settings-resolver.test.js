@@ -36,7 +36,7 @@ async function testAsync(name, fn) {
 
 console.log('Activity settings resolver tests:');
 
-const { fromRow, getResolvedSettings } = require('../activity/settings-resolver');
+const { fromRow, getResolvedSettings } = require('../../activity/settings-resolver');
 
 const REQUIRED_KEYS = ['enabled', 'cooldownMinutes', 'deliverChannel', 'deliverDm', 'deliverVoice', 'channelNameOverride', 'config'];
 
