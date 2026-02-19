@@ -23,6 +23,8 @@ type ToolDescription = {
   tool_slug: string;
   description: string;
   is_active: boolean;
+  /** Parameter name -> description (from tools_meta_data.parameter_descriptions jsonb). */
+  parameter_descriptions?: Record<string, string> | null;
 };
 
 export function PromptSectionsList({ sections }: { sections: PromptSection[] }) {
