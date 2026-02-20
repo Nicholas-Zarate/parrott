@@ -6,6 +6,7 @@ const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const poll = require('./commands/poll');
 const analysis = require('./analysis');
 const roast = require('./commands/roast');
+const voice = require('./commands/voice');
 const mention = require('./abilities/mention');
 const { isBotMentionedInContent } = require('./abilities/mention/format');
 const { startScheduler } = require('./jobs/scheduler');
@@ -52,7 +53,8 @@ client.on('ready', async () => {
     const pollCommands = poll.getPollCommands();
     const analysisCommandsList = analysis.getAnalysisCommands();
     const roastCommandsList = roast.getRoastCommands();
-    const allCommands = [...pollCommands, ...analysisCommandsList, ...roastCommandsList];
+    const voiceCommandsList = voice.getVoiceCommands();
+    const allCommands = [...pollCommands, ...analysisCommandsList, ...roastCommandsList, ...voiceCommandsList];
     try {
         await client.application.commands.set(allCommands);
         console.log('Slash commands registered!');
@@ -174,6 +176,9 @@ client.on('interactionCreate', async interaction => {
         }
         if (name === 'roast') {
             return roast.handleRoast(interaction, client);
+        }
+        if (name === 'voice') {
+            return voice.handleVoiceCommand(interaction, client);
         }
     }
 

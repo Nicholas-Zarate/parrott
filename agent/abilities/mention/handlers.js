@@ -11,6 +11,14 @@ const { playInVoiceChannel } = require('../voice');
 /** Max length of reply text sent to TTS when user asks for "in voice" / "in VC". */
 const VOICE_REPLY_MAX_LEN = 200;
 
+/** Tools that always use voice when the user is in a VC (with text fallback). Overrides response_delivery for these tools. */
+const VOICE_INHERENT_TOOLS = [
+    'join_voice_and_squawk',
+    'hang_out_in_voice',
+    'start_listening',
+    'stop_listening',
+];
+
 /**
  * Runs when someone mentions the bot in an allowed channel.
  * Rate limited per user and per channel tier (unlimited / semi: 5 per 2 min / limited: 1 per 5 min); when over limit replies with resting message and returns.
@@ -114,7 +122,10 @@ async function onMention(message, client) {
             const meta = toolMetadata[name];
             return meta && (meta.response_delivery === 'voice' || meta.response_delivery === 'both');
         });
-        const doVoice = wantsVoiceFromUser || anyToolWantsVoice;
+        const memberForVoice = message.guild ? (message.member ?? await message.guild.members.fetch(message.author?.id).catch(() => null)) : null;
+        const voiceChannel = memberForVoice?.voice?.channel;
+        const anyVoiceInherentTool = toolsCalled.length > 0 && toolsCalled.some((name) => VOICE_INHERENT_TOOLS.includes(name));
+        const doVoice = wantsVoiceFromUser || anyToolWantsVoice || (anyVoiceInherentTool && !!voiceChannel);
 
         const anyToolTextOnly = toolsCalled.length > 0 && toolsCalled.every((name) => {
             const meta = toolMetadata[name];
@@ -128,17 +139,13 @@ async function onMention(message, client) {
             await replyMsg.edit('—').catch(() => {});
         }
 
-        if (doVoice && message.guild) {
-            const member = message.member ?? await message.guild.members.fetch(message.author?.id).catch(() => null);
-            const voiceChannel = member?.voice?.channel;
-            if (voiceChannel) {
-                const textToSpeak = finalContent.length > VOICE_REPLY_MAX_LEN
-                    ? finalContent.slice(0, VOICE_REPLY_MAX_LEN).trim() + '…'
-                    : finalContent;
-                playInVoiceChannel(client, voiceChannel, { type: 'tts', text: textToSpeak }).catch((err) => {
-                    console.error('[Mention Error] Voice delivery failed:', err?.message || err);
-                });
-            }
+        if (doVoice && message.guild && voiceChannel) {
+            const textToSpeak = finalContent.length > VOICE_REPLY_MAX_LEN
+                ? finalContent.slice(0, VOICE_REPLY_MAX_LEN).trim() + '…'
+                : finalContent;
+            playInVoiceChannel(client, voiceChannel, { type: 'tts', text: textToSpeak }).catch((err) => {
+                console.error('[Mention Error] Voice delivery failed:', err?.message || err);
+            });
         }
 
         await saveConversation({

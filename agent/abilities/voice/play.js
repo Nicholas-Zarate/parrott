@@ -20,27 +20,34 @@ const { generateAudio } = require('./tts');
 const LOG_PREFIX = '[Voice]';
 
 /**
- * Play a sound in the given voice channel and leave when done.
- * - type: 'tts', text: string, voiceSettings?: object → use TTS (ElevenLabs). voiceSettings overrides env defaults (stability, similarity_boost, style, use_speaker_boost, speed).
+ * Play a sound in the given voice channel and leave when done (unless keepAlive).
+ * - type: 'tts', text: string, voiceSettings?: object → use TTS (ElevenLabs).
  * - type: 'file', path: string → play local file (optional fallback).
+ * - keepAlive: true with connection + player → use existing connection/player and do not destroy when done (for voice session).
  *
- * @param {import('discord.js').Client} client - Bot client (for adapter)
- * @param {import('discord.js').VoiceChannel} voiceChannel - Channel to join
- * @param {{ type: 'file', path: string } | { type: 'tts', text: string, voiceSettings?: object }} options - What to play
+ * @param {import('discord.js').Client} client - Bot client (for adapter; optional when keepAlive)
+ * @param {import('discord.js').VoiceChannel} [voiceChannel] - Channel to join (optional when keepAlive)
+ * @param {{ type: 'file', path: string } | { type: 'tts', text: string, voiceSettings?: object, keepAlive?: boolean, connection?: object, player?: object }} options - What to play
  * @returns {Promise<{ success: boolean, error?: string }>}
  */
 async function playInVoiceChannel(client, voiceChannel, options) {
-    const channelLabel = voiceChannel?.name ? `#${voiceChannel.name}` : voiceChannel?.id ?? '?';
-    if (!voiceChannel?.id || !voiceChannel?.guild) {
-        console.log(`${LOG_PREFIX} playInVoiceChannel skipped: invalid voice channel`);
-        return { success: false, error: 'Invalid voice channel.' };
+    const keepAlive = options.keepAlive === true && options.connection && options.player;
+    const channelLabel = voiceChannel?.name ? `#${voiceChannel.name}` : (voiceChannel?.id ?? options.connection?.joinConfig?.channelId ?? '?');
+
+    if (!keepAlive) {
+        if (!voiceChannel?.id || !voiceChannel?.guild) {
+            console.log(`${LOG_PREFIX} playInVoiceChannel skipped: invalid voice channel`);
+            return { success: false, error: 'Invalid voice channel.' };
+        }
     }
 
-    const guild = voiceChannel.guild;
-    console.log(`${LOG_PREFIX} playInVoiceChannel ${channelLabel} type=${options.type}`);
-    const adapterCreator = guild.voiceAdapterCreator;
-    if (!adapterCreator) {
-        return { success: false, error: 'Voice adapter not available (wrong Discord.js version?).' };
+    const guild = keepAlive ? null : voiceChannel.guild;
+    console.log(`${LOG_PREFIX} playInVoiceChannel ${channelLabel} type=${options.type} keepAlive=${!!keepAlive}`);
+    if (!keepAlive) {
+        const adapterCreator = guild.voiceAdapterCreator;
+        if (!adapterCreator) {
+            return { success: false, error: 'Voice adapter not available (wrong Discord.js version?).' };
+        }
     }
 
     let absolutePath;
@@ -74,22 +81,27 @@ async function playInVoiceChannel(client, voiceChannel, options) {
     }
 
     let connection;
-    try {
-        connection = joinVoiceChannel({
-            channelId: voiceChannel.id,
-            guildId: guild.id,
-            adapterCreator,
-            selfDeaf: false,
-        });
-    } catch (err) {
-        console.error(`${LOG_PREFIX} joinVoiceChannel error:`, err?.message || err);
-        deleteTtsTempFileIfNeeded();
-        return { success: false, error: err?.message || 'Failed to join voice channel.' };
+    let player;
+    if (keepAlive) {
+        connection = options.connection;
+        player = options.player;
+    } else {
+        try {
+            connection = joinVoiceChannel({
+                channelId: voiceChannel.id,
+                guildId: guild.id,
+                adapterCreator: guild.voiceAdapterCreator,
+                selfDeaf: false,
+            });
+        } catch (err) {
+            console.error(`${LOG_PREFIX} joinVoiceChannel error:`, err?.message || err);
+            deleteTtsTempFileIfNeeded();
+            return { success: false, error: err?.message || 'Failed to join voice channel.' };
+        }
+        console.log(`${LOG_PREFIX} joined ${channelLabel}, starting playback`);
+        player = createAudioPlayer();
+        connection.subscribe(player);
     }
-    console.log(`${LOG_PREFIX} joined ${channelLabel}, starting playback`);
-
-    const player = createAudioPlayer();
-    connection.subscribe(player);
 
     try {
         const stream = fs.createReadStream(absolutePath);
@@ -98,7 +110,9 @@ async function playInVoiceChannel(client, voiceChannel, options) {
         player.play(resource);
     } catch (err) {
         console.error(`${LOG_PREFIX} createAudioResource/play error:`, err?.message || err);
-        connection.destroy();
+        if (!keepAlive) {
+            connection.destroy();
+        }
         setTimeout(() => deleteTtsTempFileIfNeeded(), 2000);
         return { success: false, error: err?.message || 'Failed to play audio. Is FFmpeg installed?' };
     }
@@ -121,16 +135,17 @@ async function playInVoiceChannel(client, voiceChannel, options) {
         function cleanup() {
             clearTimeout(timeoutId);
             player.removeAllListeners();
-            try {
-                const conn = getVoiceConnection(guild.id);
-                if (conn) conn.destroy();
-            } catch (_) { /* ignore */ }
-            // Delay delete so any in-flight ReadStream has time to open/close the file (avoids ENOENT on Windows)
+            if (!keepAlive && guild) {
+                try {
+                    const conn = getVoiceConnection(guild.id);
+                    if (conn) conn.destroy();
+                } catch (_) { /* ignore */ }
+            }
             setTimeout(() => deleteTtsTempFileIfNeeded(), 2000);
         }
 
         player.on(AudioPlayerStatus.Idle, () => {
-            console.log(`${LOG_PREFIX} playback finished, leaving ${channelLabel}`);
+            console.log(`${LOG_PREFIX} playback finished${keepAlive ? '' : `, leaving ${channelLabel}`}`);
             once({ success: true });
         });
         player.on('error', (err) => {
@@ -142,6 +157,28 @@ async function playInVoiceChannel(client, voiceChannel, options) {
 
 /** Fixed phrase for squawk tool until we allow custom lines (e.g. from LLM). */
 const SQUAWK_PHRASE = 'Hey everyone, okay bye!';
+
+/**
+ * Play TTS in an existing voice session (does not join/leave). Uses session's connection and audioPlayer.
+ *
+ * @param {{ connection: object, audioPlayer: object }} session - From voice session manager
+ * @param {string} text - Text to speak via TTS
+ * @param {{ stability?: number, similarity_boost?: number, style?: number, use_speaker_boost?: boolean, speed?: number }} [voiceSettings] - Optional TTS settings
+ * @returns {Promise<{ success: boolean, error?: string }>}
+ */
+async function playInSession(session, text, voiceSettings = {}) {
+    if (!session?.connection || !session?.audioPlayer) {
+        return { success: false, error: 'Invalid session (missing connection or audioPlayer).' };
+    }
+    return playInVoiceChannel(null, null, {
+        type: 'tts',
+        text,
+        voiceSettings,
+        keepAlive: true,
+        connection: session.connection,
+        player: session.audioPlayer,
+    });
+}
 
 /**
  * Join the user's voice channel and speak the squawk phrase via ElevenLabs TTS, then leave.
@@ -156,5 +193,6 @@ async function playSquawkInChannel(client, voiceChannel) {
 
 module.exports = {
     playInVoiceChannel,
+    playInSession,
     playSquawkInChannel,
 };

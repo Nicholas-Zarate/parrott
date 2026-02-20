@@ -4,7 +4,7 @@
 
 const { tool } = require('ai');
 const z = require('zod');
-const { playInVoiceChannel } = require('../abilities/voice');
+const { playInVoiceChannel, playInSession, getSession } = require('../abilities/voice');
 const { generateHollaResponse, FALLBACK_PHRASE } = require('../abilities/voice/holla');
 const { getToolDescription, LOG_PREFIX, resolveVoiceChannelForMemberWithFetch } = require('./helpers/helpers');
 
@@ -59,6 +59,21 @@ function buildJoinVoiceAndSquawkTool(context) {
 
             if (!textToSpeak || !String(textToSpeak).trim()) {
                 textToSpeak = FALLBACK_PHRASE;
+            }
+
+            const session = getSession(guild.id);
+            if (session) {
+                console.log(`${LOG_PREFIX} join_voice_and_squawk session exists, playing in session for @${authorTag}`);
+                try {
+                    const result = await playInSession(session, textToSpeak);
+                    if (result.success) {
+                        return { success: true, message: 'Spoke in voice chat.' };
+                    }
+                    return { success: false, error: result.error || 'Failed to play sound.' };
+                } catch (err) {
+                    console.error(`${LOG_PREFIX} join_voice_and_squawk playInSession error:`, err?.message || err);
+                    return { success: false, error: err?.message || 'Voice error. Try again.' };
+                }
             }
 
             console.log(`${LOG_PREFIX} join_voice_and_squawk joining VC "${voiceChannel.name}" for @${authorTag}`);
