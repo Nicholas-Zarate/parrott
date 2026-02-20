@@ -17,6 +17,9 @@ const { buildSearchWebTool } = require('../tools/search_web');
 const { buildCreateHearingPollTool } = require('../tools/create_hearing_poll');
 const { buildCreateTimerTool } = require('../tools/create_timer');
 const { buildJoinVoiceAndSquawkTool } = require('../tools/join_voice_and_squawk');
+const { buildHangOutInVoiceTool } = require('../tools/hang_out_in_voice');
+const { buildStartListeningTool } = require('../tools/start_listening');
+const { buildStopListeningTool } = require('../tools/stop_listening');
 const { buildSingSongTool } = require('../tools/sing_song');
 const { buildEchoTool } = require('../tools/echo');
 const { buildIntrospectionTool } = require('../tools/introspection');
@@ -38,6 +41,9 @@ function buildTools(context = {}) {
         create_hearing_poll: buildCreateHearingPollTool(context),
         create_timer: buildCreateTimerTool(context),
         join_voice_and_squawk: buildJoinVoiceAndSquawkTool(context),
+        hang_out_in_voice: buildHangOutInVoiceTool(context),
+        start_listening: buildStartListeningTool(context),
+        stop_listening: buildStopListeningTool(context),
         sing_song: buildSingSongTool(context),
         echo: buildEchoTool(context),
         introspection: buildIntrospectionTool(context),
