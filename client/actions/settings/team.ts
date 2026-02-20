@@ -73,6 +73,7 @@ export async function setMemberRole(
   const supabase = await createClient();
   if (role === null) {
     const { error } = await supabase.from("parrott_app_roles").delete().eq("user_id", userId);
+    revalidatePath("/settings/team");
     return { error: error?.message ?? null };
   }
   const { error } = await supabase.from("parrott_app_roles").upsert(
