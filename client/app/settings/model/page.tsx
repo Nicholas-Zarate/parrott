@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePermissions } from "@/lib/hooks/use-permissions";
-import { fetchRuntimeConfig, updateRuntimeConfigModel } from "@/lib/runtime-config";
+import { fetchRuntimeConfig, updateRuntimeConfigModel } from "@/actions/settings/runtimeConfig";
 
 export const dynamic = "force-dynamic";
 
@@ -37,18 +37,14 @@ export default function ModelPage() {
   const [state, setState] = useState<ModelState>({ status: "loading" });
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setState({ status: "loading" });
-    fetchRuntimeConfig()
-      .then((config) =>
-        setState({ status: "success", model: config.model ?? null })
-      )
-      .catch((err) =>
-        setState({
-          status: "error",
-          error: err instanceof Error ? err.message : "Failed to load config",
-        })
-      );
+    const result = await fetchRuntimeConfig();
+    if (result.error) {
+      setState({ status: "error", error: result.error });
+      return;
+    }
+    setState({ status: "success", model: result.data?.model ?? null });
   }, []);
 
   useEffect(() => {

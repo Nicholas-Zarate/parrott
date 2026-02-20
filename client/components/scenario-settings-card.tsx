@@ -9,9 +9,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TRIGGER_LABELS } from "@/lib/activity-helpers";
-import type { ScenarioSetting } from "@/lib/activity-trigger-settings";
+import type { ScenarioSetting } from "@/actions/settings/activityTriggerSettings";
 import type { ScenarioConfig } from "@/lib/activity-scenarios";
-import { saveAppDefaultSetting } from "@/lib/activity-trigger-settings";
+import { saveAppDefaultSetting } from "@/actions/settings/activityTriggerSettings";
 import { cn } from "@/lib/utils";
 
 type ScenarioSettingsCardProps = {

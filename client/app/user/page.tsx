@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { getDmPreference, setDmPreference } from "@/lib/user-dm-preferences";
+import { getDmPreference, setDmPreference } from "@/actions/user/dmPreferences";
 
 export const dynamic = "force-dynamic";
 
@@ -52,15 +52,15 @@ export default function UserPage() {
       return;
     }
 
-    const { data: pref, error: prefError } = await getDmPreference(user.id);
-    if (prefError) {
-      setState({ status: "error", error: prefError.message });
+    const prefResult = await getDmPreference(user.id);
+    if (prefResult.error) {
+      setState({ status: "error", error: prefResult.error });
       return;
     }
     setState({
       status: "ready",
       profile,
-      allowActivityDm: pref?.allowActivityDm ?? true,
+      allowActivityDm: prefResult.data?.allowActivityDm ?? true,
     });
   }, []);
 
@@ -80,7 +80,7 @@ export default function UserPage() {
     const { error } = await setDmPreference(profile.user_id, discordId, checked);
     setBusy(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(error);
       return;
     }
     setState((s) => (s.status === "ready" ? { ...s, allowActivityDm: checked } : s));

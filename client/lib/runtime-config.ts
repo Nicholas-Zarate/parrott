@@ -1,6 +1,6 @@
 /**
+ * @deprecated Data access moved to Server Actions. Use @/actions/settings/runtimeConfig instead.
  * Client-side fetch/update for parrot_runtime_config (model, token limits).
- * Used by the Model settings page. Agent reads this table at startup or when config is refreshed.
  */
 
 import { createClient } from "@/lib/supabase/client";

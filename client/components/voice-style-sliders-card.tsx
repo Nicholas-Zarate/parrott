@@ -9,7 +9,7 @@ import {
   saveVoiceDimensions,
   type VoiceDimensionsValues,
   type VoiceScope,
-} from "@/lib/voice-dimensions";
+} from "@/actions/settings/voiceDimensions";
 
 const SLIDER_LABELS: { key: keyof VoiceDimensionsValues; label: string }[] = [
   { key: "snarky", label: "Snarky" },
@@ -41,8 +41,15 @@ export function VoiceStyleSlidersCard({ scope, title, description, canEdit }: Pr
 
   const load = useCallback(async () => {
     setLoading(true);
-    const row = await fetchVoiceDimensions(scope);
+    const result = await fetchVoiceDimensions(scope);
     setLoading(false);
+    if (result.error) {
+      setValues({ snarky: 0, chill: 0, witty: 0, sarcastic: 0, sassy: 0 });
+      setSavedValues(null);
+      setHasRow(false);
+      return;
+    }
+    const row = result.data;
     if (row) {
       const base = {
         snarky: row.snarky,

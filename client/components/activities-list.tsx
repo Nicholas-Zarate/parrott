@@ -1,14 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { ActivityCard, type ActivityRow } from "@/components/activity-card";
 import { ActivityLoadingCard } from "@/components/activity-loading-card";
 import { Button } from "@/components/ui/button";
 import { ACTIVITIES_LOADING_MS } from "@/lib/activity-helpers";
-
-const TABLE = "activity_listeners";
-const LIMIT = 100;
+import { fetchActivitiesList } from "@/actions/activities/list";
 
 type State =
   | { status: "loading" }
@@ -19,37 +16,13 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchActivitiesFromSupabase(): Promise<{
-  data: ActivityRow[] | null;
-  error: string | null;
-}> {
-  try {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(LIMIT);
-    if (error) return { data: null, error: error.message };
-    return { data: (data ?? []) as ActivityRow[], error: null };
-  } catch (err) {
-    return {
-      data: null,
-      error: err instanceof Error ? err.message : "Failed to load",
-    };
-  }
-}
-
 export function ActivitiesList() {
   const [state, setState] = useState<State>({ status: "loading" });
 
   const load = useCallback(() => {
     setState({ status: "loading" });
     let cancelled = false;
-    Promise.all([
-      delay(ACTIVITIES_LOADING_MS),
-      fetchActivitiesFromSupabase(),
-    ]).then(([, result]) => {
+    Promise.all([delay(ACTIVITIES_LOADING_MS), fetchActivitiesList()]).then(([, result]) => {
       if (cancelled) return;
       if (result.error) {
         setState({ status: "error", error: result.error });
@@ -64,9 +37,7 @@ export function ActivitiesList() {
 
   useEffect(() => {
     const cancel = load();
-    return () => {
-      if (cancel) cancel();
-    };
+    return () => cancel();
   }, [load]);
 
   if (state.status === "loading") {

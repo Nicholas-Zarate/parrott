@@ -1,6 +1,6 @@
 /**
+ * @deprecated Data access moved to Server Actions. Use @/actions/user/dmPreferences instead.
  * Client-side fetch/update for user_dm_preferences (opt-in/out of activity DMs).
- * RLS: users can only read/update their own row (user_id = auth.uid()).
  */
 
 import { createClient } from "@/lib/supabase/client";

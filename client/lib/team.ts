@@ -1,6 +1,6 @@
 /**
+ * @deprecated Data access moved to Server Actions. Use @/actions/settings/team instead.
  * Client-side helpers for the Team / Roles page.
- * Fetches user profiles (from parrott_user_profiles view) and app roles (from parrott_app_roles).
  */
 
 import { createClient } from "@/lib/supabase/client";

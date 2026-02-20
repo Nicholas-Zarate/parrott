@@ -6,11 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  fetchRoastConfig,
-  updateRoastConfig,
-  type RoastConfig,
-} from "@/lib/roast-config";
+import { fetchRoastConfig, updateRoastConfig, type RoastConfig } from "@/actions/settings/roastConfig";
 
 type Props = {
   canEdit: boolean;
@@ -29,14 +25,15 @@ export function RoastConfigCard({ canEdit }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const data = await fetchRoastConfig();
-      setConfig(data);
-      setSavedConfig(data);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to load roast config");
-    } finally {
-      setLoading(false);
+    const result = await fetchRoastConfig();
+    setLoading(false);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    if (result.data) {
+      setConfig(result.data);
+      setSavedConfig(result.data);
     }
   }, []);
 

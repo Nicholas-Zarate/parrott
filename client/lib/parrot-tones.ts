@@ -1,6 +1,6 @@
 /**
+ * @deprecated Data access moved to Server Actions. Use @/actions/personality/updateTone instead.
  * Client-side update for parrot_tones (tone description).
- * Used by Personality → Tones: edit description in the detail sheet.
  */
 
 import { createClient } from "@/lib/supabase/client";

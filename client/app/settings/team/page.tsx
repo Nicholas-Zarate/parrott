@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePermissions, type AppRole } from "@/lib/hooks/use-permissions";
-import { fetchTeamMembers, setMemberRole, fetchAdminDiscordIds, type TeamMember } from "@/lib/team";
+import { fetchTeamMembers, setMemberRole, fetchAdminDiscordIds, type TeamMember } from "@/actions/settings/team";
 
 export const dynamic = "force-dynamic";
 
@@ -63,18 +63,25 @@ export default function TeamPage() {
   const [state, setState] = useState<TeamState>({ status: "loading" });
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setState({ status: "loading" });
-    Promise.all([fetchTeamMembers(), fetchAdminDiscordIds()])
-      .then(([members, adminDiscordIds]) =>
-        setState({ status: "success", members, adminDiscordIds })
-      )
-      .catch((err) =>
-        setState({
-          status: "error",
-          error: err instanceof Error ? err.message : "Failed to load team",
-        })
-      );
+    const [membersResult, adminIdsResult] = await Promise.all([
+      fetchTeamMembers(),
+      fetchAdminDiscordIds(),
+    ]);
+    if (membersResult.error) {
+      setState({ status: "error", error: membersResult.error });
+      return;
+    }
+    if (adminIdsResult.error) {
+      setState({ status: "error", error: adminIdsResult.error });
+      return;
+    }
+    setState({
+      status: "success",
+      members: membersResult.data ?? [],
+      adminDiscordIds: new Set(adminIdsResult.data ?? []),
+    });
   }, []);
 
   useEffect(() => {

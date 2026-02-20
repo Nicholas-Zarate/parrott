@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { parseUserContext, formatHistoryDate } from "@/lib/history-parse";
 import { buildSearchParams, getHighlightTerms, HISTORY_SEARCH_RESULT_LIMIT } from "@/lib/history-search";
+import { searchConversationHistory } from "@/actions/history/searchConversationHistory";
 import { HistoryFilterHeader } from "@/components/history-filter-header";
 import { HistoryCard, type HistoryRow, type ParsedNames } from "@/components/history-card";
 import { HistoryField, UserTextIcon, ResponseTextIcon } from "@/components/history-field";
@@ -84,36 +84,26 @@ export function HistoryListWithFilters({ rows }: { rows: HistoryRowWithMeta[] })
     }
     const runId = ++searchRunIdRef.current;
     setIsSearching(true);
-    const supabase = createClient();
     const params = buildSearchParams(
       { dateFrom, dateTo, channelId },
       searchQuery,
       HISTORY_SEARCH_RESULT_LIMIT,
       0
     );
-    supabase
-      .rpc("search_conversation_history", params)
-      .then(
-        ({ data, error }) => {
-          if (runId !== searchRunIdRef.current) return;
-          setIsSearching(false);
-          if (error) {
-            setSearchResults([]);
-            return;
-          }
-          const withMeta: HistoryRowWithMeta[] = (data ?? []).map((row: HistoryRow) => ({
-            ...row,
-            parsed: parseUserContext(row.user_text),
-            formattedDate: formatHistoryDate(row.created_at),
-          }));
-          setSearchResults(withMeta);
-        },
-        () => {
-          if (runId !== searchRunIdRef.current) return;
-          setIsSearching(false);
-          setSearchResults([]);
-        }
-      );
+    searchConversationHistory(params).then((result) => {
+      if (runId !== searchRunIdRef.current) return;
+      setIsSearching(false);
+      if (result.error) {
+        setSearchResults([]);
+        return;
+      }
+      const withMeta: HistoryRowWithMeta[] = (result.data ?? []).map((row) => ({
+        ...row,
+        parsed: parseUserContext(row.user_text),
+        formattedDate: formatHistoryDate(row.created_at),
+      }));
+      setSearchResults(withMeta);
+    });
   }, [searchQuery, dateFrom, dateTo, channelId]);
 
   const sourceRows = searchResults !== null ? searchResults : rows;
