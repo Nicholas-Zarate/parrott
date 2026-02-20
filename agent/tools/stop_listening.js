@@ -4,7 +4,7 @@
 
 const { tool } = require('ai');
 const z = require('zod');
-const { getSession, setListening } = require('../abilities/voice');
+const { getSession, setListening } = require('../abilities/voice/session');
 const { stopPipeline } = require('../abilities/voice/pipeline');
 const { getToolDescription } = require('./helpers/helpers');
 

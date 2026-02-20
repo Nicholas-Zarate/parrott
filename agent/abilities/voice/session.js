@@ -5,7 +5,6 @@
 
 const { joinVoiceChannel, createAudioPlayer, getVoiceConnection } = require('@discordjs/voice');
 const { insertVoiceSession, endVoiceSession } = require('../../database/supabase/voice-sessions');
-const { stopPipeline } = require('./pipeline');
 
 const LOG_PREFIX = '[Voice session]';
 
@@ -20,6 +19,10 @@ const LOG_PREFIX = '[Voice session]';
  * @property {number} startedAt
  * @property {string} sessionId
  * @property {{ role: string, content: string }[]} messageHistory
+ * @property {{ text: string, endTs: number }[]} [recentUtterances] - Last 5s of transcript for quick-comment job
+ * @property {{ text: string, ts: number } | null} [lastCompressedWindow] - Compressed text from last window
+ * @property {number} [lastQuickCommentAt] - Timestamp of last event-driven quick comment (cooldown)
+ * @property {string | null} [expectDirectInputFromUserId] - When set, next utterance from this user is used as direct input (parrott keyword)
  */
 
 /** @type {Map<string, VoiceSession>} */
@@ -93,6 +96,10 @@ async function startSession(client, guild, voiceChannel, options = {}) {
         startedAt: Date.now(),
         sessionId,
         messageHistory: [],
+        recentUtterances: [],
+        lastCompressedWindow: null,
+        lastQuickCommentAt: 0,
+        expectDirectInputFromUserId: null,
     };
     sessionsByGuild.set(guildId, session);
 
@@ -118,6 +125,7 @@ async function endSession(guildId) {
         return { ok: true };
     }
     sessionsByGuild.delete(String(guildId));
+    const { stopPipeline } = require('./pipeline');
     stopPipeline(guildId);
     const { ok, error } = await endVoiceSession(session.sessionId);
     try {

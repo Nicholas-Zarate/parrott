@@ -12,8 +12,18 @@ const { chatWithTools } = require('../../ai-sdk/with-tools');
 const parrotConfig = require('../../config/parrot');
 const { playInSession } = require('./play');
 const { transcribeFromFile } = require('./stt');
+const { appendAndCompress } = require('./rolling-buffer');
+const { PARROTT_TRIGGER_REGEX, extractAfterTrigger } = require('./keyword-trigger');
 
 const LOG_PREFIX = '[Voice pipeline]';
+
+/** Discord voice receive is 48 kHz mono. FFmpeg cannot read raw Opus frames; we decode to PCM then convert. */
+const OPUS_SAMPLE_RATE = 48000;
+const OPUS_CHANNELS = 1;
+const MIN_PCM_BYTES = 8000; // ~50ms at 48kHz s16le mono; avoid empty/short files
+
+/** Max time to wait for voice stream to end (silence) before giving up. Shorter = faster reply when Discord never sends stream end. */
+const STREAM_COLLECT_TIMEOUT_MS = Number(process.env.VOICE_STREAM_TIMEOUT_MS) || 8000;
 
 /** @type {Map<string, { stop: () => void }>} */
 const activePipelines = new Map();
@@ -55,7 +65,11 @@ function startPipeline(session, client) {
 
     /** @param {string} userId */
     async function onStart(userId) {
-        if (stopped || !session.listening || processingTurn) return;
+        console.log(`${LOG_PREFIX} guild ${guildId} user ${userId} started speaking`);
+        if (stopped || !session.listening || processingTurn) {
+            console.log(`${LOG_PREFIX} guild ${guildId} skip: stopped=${stopped} listening=${session.listening} processingTurn=${processingTurn}`);
+            return;
+        }
         processingTurn = true;
         let tempPath = null;
         try {
@@ -63,38 +77,121 @@ function startPipeline(session, client) {
             const endBehavior = { end: { behavior: EndBehaviorType.AfterSilence, duration: 500 } };
             const stream = receiver.subscribe(userId, endBehavior);
 
-            tempPath = path.join(os.tmpdir(), `parrott-voice-${Date.now()}-${Math.random().toString(36).slice(2)}.opus`);
-            const writeStream = fs.createWriteStream(tempPath);
-            await new Promise((resolve, reject) => {
-                stream.pipe(writeStream);
+            const opusChunks = [];
+            stream.on('data', (chunk) => {
+                if (Buffer.isBuffer(chunk)) opusChunks.push(chunk);
+                else if (chunk && typeof chunk === 'object' && Buffer.isBuffer(chunk.data)) opusChunks.push(chunk.data);
+                else if (chunk != null) opusChunks.push(Buffer.from(chunk));
+            });
+            const streamEndPromise = new Promise((resolve, reject) => {
                 stream.on('end', resolve);
                 stream.on('error', reject);
-                writeStream.on('error', reject);
             });
-            writeStream.end();
-            await new Promise((r) => writeStream.on('finish', r));
+            let streamTimeoutId;
+            const timeoutPromise = new Promise((resolve) => {
+                streamTimeoutId = setTimeout(() => {
+                    console.log(`${LOG_PREFIX} guild ${guildId} stream collect timeout after ${STREAM_COLLECT_TIMEOUT_MS / 1000}s, using partial audio (${opusChunks.length} opus packets)`);
+                    stream.destroy?.();
+                    resolve();
+                }, STREAM_COLLECT_TIMEOUT_MS);
+            });
+            await Promise.race([streamEndPromise, timeoutPromise]);
+            if (streamTimeoutId) clearTimeout(streamTimeoutId);
+
+            if (opusChunks.length === 0) {
+                console.log(`${LOG_PREFIX} guild ${guildId} no opus packets received, skipping turn`);
+                processingTurn = false;
+                return;
+            }
+
+            const { OpusEncoder } = require('@discordjs/opus');
+            const opusDecoder = new OpusEncoder(OPUS_SAMPLE_RATE, OPUS_CHANNELS);
+            const pcmChunks = [];
+            for (const opusPacket of opusChunks) {
+                try {
+                    const pcm = opusDecoder.decode(opusPacket);
+                    if (pcm && pcm.length) pcmChunks.push(pcm);
+                } catch (e) {
+                    // skip bad/corrupt opus packet
+                }
+            }
+            opusDecoder.delete?.();
+
+            const pcmBuffer = pcmChunks.length ? Buffer.concat(pcmChunks) : Buffer.alloc(0);
+            if (pcmBuffer.length < MIN_PCM_BYTES) {
+                console.log(`${LOG_PREFIX} guild ${guildId} decoded PCM too short (${pcmBuffer.length} bytes from ${opusChunks.length} packets), skipping turn`);
+                processingTurn = false;
+                return;
+            }
+
+            tempPath = path.join(os.tmpdir(), `parrott-voice-${Date.now()}-${Math.random().toString(36).slice(2)}.pcm`);
+            fs.writeFileSync(tempPath, pcmBuffer);
 
             const convertedPath = path.join(os.tmpdir(), `parrott-voice-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
             const { spawn } = require('child_process');
             const ffmpegPath = require('ffmpeg-static') || 'ffmpeg';
-            await new Promise((resolve, reject) => {
-                const ffmpeg = spawn(ffmpegPath, ['-f', 'opus', '-i', tempPath, '-acodec', 'libmp3lame', '-f', 'mp3', convertedPath], { stdio: 'ignore' });
-                ffmpeg.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg ${code}`))));
+            const ffmpegExitCode = await new Promise((resolve, reject) => {
+                const ffmpeg = spawn(ffmpegPath, [
+                    '-f', 's16le', '-ac', String(OPUS_CHANNELS), '-ar', String(OPUS_SAMPLE_RATE),
+                    '-i', tempPath,
+                    '-acodec', 'libmp3lame', '-f', 'mp3', convertedPath,
+                ], { stdio: 'ignore' });
+                ffmpeg.on('close', resolve);
                 ffmpeg.on('error', reject);
             });
-            try { fs.unlinkSync(tempPath); } catch (_) {}
+            try { if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
             tempPath = convertedPath;
+            if (ffmpegExitCode !== 0) {
+                console.log(`${LOG_PREFIX} guild ${guildId} ffmpeg failed: exit ${ffmpegExitCode} (PCM→mp3), skipping turn`);
+                try { if (fs.existsSync(convertedPath)) fs.unlinkSync(convertedPath); } catch (_) {}
+                processingTurn = false;
+                return;
+            }
 
             const sttResult = await transcribeFromFile(convertedPath);
             try { if (fs.existsSync(convertedPath)) fs.unlinkSync(convertedPath); } catch (_) {}
             if (!sttResult.success || !sttResult.text?.trim()) {
+                console.log(`${LOG_PREFIX} guild ${guildId} STT failed or empty: success=${sttResult.success} error=${sttResult.error ?? 'none'} textLength=${sttResult.text?.length ?? 0}`);
                 processingTurn = false;
                 return;
             }
 
             const userText = sttResult.text.trim();
-            session.messageHistory.push({ role: 'user', content: userText });
-            await insertVoiceSessionTurn({ session_id: session.sessionId, speaker: 'user', content: userText });
+            console.log(`${LOG_PREFIX} guild ${guildId} STT: "${userText.length > 120 ? userText.slice(0, 120) + '…' : userText}"`);
+            appendAndCompress(session, userText);
+
+            let userMessage = userText;
+            const expectUserId = session.expectDirectInputFromUserId;
+
+            if (expectUserId) {
+                const match = userId === expectUserId;
+                console.log(`${LOG_PREFIX} guild ${guildId} expectDirectInputFromUserId=${expectUserId} currentUser=${userId} match=${match} → ${match ? 'using utterance' : 'ignoring'}`);
+                if (match) {
+                    session.expectDirectInputFromUserId = null;
+                    userMessage = userText;
+                } else {
+                    processingTurn = false;
+                    return;
+                }
+            } else {
+                const afterTrigger = extractAfterTrigger(userText);
+                const triggerLabel = afterTrigger === null ? 'no match' : (afterTrigger === '' ? 'trigger only' : afterTrigger.slice(0, 80) + (afterTrigger.length > 80 ? '…' : ''));
+                console.log(`${LOG_PREFIX} guild ${guildId} trigger check: afterTrigger=${triggerLabel}`);
+                if (afterTrigger !== null) {
+                    if (afterTrigger.length > 0) {
+                        userMessage = afterTrigger;
+                    } else {
+                        console.log(`${LOG_PREFIX} guild ${guildId} waiting for next utterance from ${userId}`);
+                        session.expectDirectInputFromUserId = userId;
+                        processingTurn = false;
+                        return;
+                    }
+                }
+            }
+
+            console.log(`${LOG_PREFIX} guild ${guildId} running LLM for userMessage: "${userMessage.length > 80 ? userMessage.slice(0, 80) + '…' : userMessage}"`);
+            session.messageHistory.push({ role: 'user', content: userMessage });
+            await insertVoiceSessionTurn({ session_id: session.sessionId, speaker: 'user', content: userMessage });
 
             const systemPrompt = parrotConfig.getSystemPromptWithTools({});
             const messages = [
@@ -117,8 +214,9 @@ function startPipeline(session, client) {
             };
             const context = { message: fakeMessage, client, voiceSession: session };
 
+            const voiceModel = process.env.VOICE_MODEL?.trim() || parrotConfig.voice_model || parrotConfig.model;
             const { text, steps } = await chatWithTools(messages, context, {
-                model: parrotConfig.model,
+                model: voiceModel,
                 maxTokens: Math.max(parrotConfig.max_completion_tokens ?? 256, 400),
             });
             const finalText = text?.trim() || 'SQUAWK.';
@@ -137,7 +235,7 @@ function startPipeline(session, client) {
 
             await playInSession(session, finalText);
         } catch (err) {
-            console.error(`${LOG_PREFIX} turn error:`, err?.message || err);
+            console.error(`${LOG_PREFIX} turn error (guild ${guildId} user ${userId}):`, err?.message || err);
         } finally {
             if (tempPath && fs.existsSync(tempPath)) {
                 try { fs.unlinkSync(tempPath); } catch (_) {}
@@ -149,6 +247,7 @@ function startPipeline(session, client) {
     try {
         if (receiver.speaking && typeof receiver.speaking.on === 'function') {
             receiver.speaking.on('start', onStart);
+            console.log(`${LOG_PREFIX} guild ${guildId} listening for speech (receiver.speaking.start)`);
         }
     } catch (e) {
         console.error(`${LOG_PREFIX} receiver.speaking.on:`, e?.message);
@@ -169,4 +268,5 @@ function stopPipeline(guildId) {
 module.exports = {
     startPipeline,
     stopPipeline,
+    PARROTT_TRIGGER_REGEX: require('./keyword-trigger').PARROTT_TRIGGER_REGEX,
 };

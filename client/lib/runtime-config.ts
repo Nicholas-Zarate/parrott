@@ -10,6 +10,7 @@ const TABLE = "parrot_runtime_config";
 
 export type RuntimeConfig = {
   model: string | null;
+  voiceModel: string | null;
   maxCompletionTokens: number | null;
   maxPromptTokens: number | null;
 };
@@ -27,6 +28,7 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
 
   const config: RuntimeConfig = {
     model: null,
+    voiceModel: null,
     maxCompletionTokens: null,
     maxPromptTokens: null,
   };
@@ -36,6 +38,8 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
     if (!k) continue;
     if (k === "model" && row.value_text != null)
       config.model = String(row.value_text).trim() || null;
+    if (k === "voice_model" && row.value_text != null)
+      config.voiceModel = String(row.value_text).trim() || null;
     if (k === "max_completion_tokens" && row.value_int != null)
       config.maxCompletionTokens = Number(row.value_int);
     if (k === "max_prompt_tokens" && row.value_int != null)
@@ -78,5 +82,26 @@ export async function updateRuntimeConfigModel(
       changes: { model: { old: prev, new: trimmed } },
     });
   }
+  return { error: null };
+}
+
+/**
+ * Update the voice_model id in parrot_runtime_config. Caller must be admin (RLS enforces).
+ * Requires migration 054 to have run (row must exist).
+ */
+export async function updateRuntimeConfigVoiceModel(
+  modelId: string
+): Promise<{ error: string | null }> {
+  const supabase = createClient();
+  const trimmed = modelId.trim();
+  const { error } = await supabase
+    .from(TABLE)
+    .update({
+      value_text: trimmed,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("key", "voice_model");
+
+  if (error) return { error: error.message };
   return { error: null };
 }

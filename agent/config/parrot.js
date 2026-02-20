@@ -222,6 +222,12 @@ module.exports = {
         if (fromDb != null && String(fromDb).trim()) return String(fromDb).trim();
         return null;
     },
+    /** Voice chat model from Supabase only; null when not set (pipeline then falls back to model). */
+    get voice_model() {
+        const fromDb = cachedRuntimeConfig?.voice_model;
+        if (fromDb != null && String(fromDb).trim()) return String(fromDb).trim();
+        return null;
+    },
     /** Max completion tokens from Supabase only; null when not set. */
     get max_completion_tokens() {
         const fromDb = cachedRuntimeConfig?.max_completion_tokens;
