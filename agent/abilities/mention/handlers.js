@@ -106,10 +106,29 @@ async function onMention(message, client) {
             maxTokens: Math.max(parrotConfig.max_completion_tokens ?? 256, 400),
         });
         const finalContent = text?.trim() || 'SQUAWK.';
-        await replyMsg.edit(finalContent);
+        const toolsCalled = getToolsCalledFromSteps(steps);
+        const toolMetadata = parrotConfig.getToolMetadata() || {};
 
-        const wantsVoice = /\b(in voice chat|in voice|in vc)\b/i.test(fullUserContent || message.content || '');
-        if (wantsVoice && message.guild) {
+        const wantsVoiceFromUser = /\b(in voice chat|in voice|in vc)\b/i.test(fullUserContent || message.content || '');
+        const anyToolWantsVoice = toolsCalled.length > 0 && toolsCalled.some((name) => {
+            const meta = toolMetadata[name];
+            return meta && (meta.response_delivery === 'voice' || meta.response_delivery === 'both');
+        });
+        const doVoice = wantsVoiceFromUser || anyToolWantsVoice;
+
+        const anyToolTextOnly = toolsCalled.length > 0 && toolsCalled.every((name) => {
+            const meta = toolMetadata[name];
+            return meta && meta.response_delivery === 'voice';
+        });
+        const doText = !anyToolTextOnly;
+
+        if (doText) {
+            await replyMsg.edit(finalContent);
+        } else {
+            await replyMsg.edit('—').catch(() => {});
+        }
+
+        if (doVoice && message.guild) {
             const member = message.member ?? await message.guild.members.fetch(message.author?.id).catch(() => null);
             const voiceChannel = member?.voice?.channel;
             if (voiceChannel) {
@@ -122,7 +141,6 @@ async function onMention(message, client) {
             }
         }
 
-        const toolsCalled = getToolsCalledFromSteps(steps);
         await saveConversation({
             previous_message_id: message.id,
             reply_message_id: replyMsg.id,

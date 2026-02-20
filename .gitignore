@@ -1,2 +1,6 @@
 # Instruction sets and plan docs (see /instructions)
 instructions/
+/docs/private
+
+# Playwright stored auth (admin session for E2E)
+client/playwright/.auth/
