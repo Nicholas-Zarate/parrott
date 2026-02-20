@@ -240,6 +240,21 @@ module.exports = {
         if (fromDb != null && Number.isFinite(Number(fromDb)) && Number(fromDb) > 0) return Number(fromDb);
         return null;
     },
+    /** TTS response ending (postfix) from Supabase. Default " SQUACK NINJAS" when key missing; empty string = do not append. */
+    get tts_ending() {
+        const ending = cachedRuntimeConfig?.tts_ending;
+         const probability = cachedRuntimeConfig?.tts_ending_probability;
+        if (ending){
+         if(probability){
+            //ex: probability = 50
+            //if random result x < 50, It's returned!
+            //if random result x >= 50, It's broken! 'oops, something broke when I got the';
+            return Math.random() * 100 < probability ? ending : 'oops, something broke on my probability check for my ending phrase. Why is the default squack ninjas anyways do? like huh';
+         }
+         return ending;
+        }
+        return '';
+    },
     /** Current tones from Supabase only; null when not configured. */
     get tones() {
         return getTones();
