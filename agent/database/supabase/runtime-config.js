@@ -8,8 +8,8 @@ const { getClient } = require('./client');
 const TABLE = 'parrot_runtime_config';
 
 /**
- * Fetch all rows and return { model?: string, max_completion_tokens?: number, max_prompt_tokens?: number }.
- * @returns {Promise<{ model?: string, max_completion_tokens?: number, max_prompt_tokens?: number } | null>}
+ * Fetch all rows and return { model?, voice_model?, max_completion_tokens?, max_prompt_tokens? }.
+ * @returns {Promise<{ model?: string, voice_model?: string, max_completion_tokens?: number, max_prompt_tokens?: number } | null>}
  */
 async function getRuntimeConfigFromSupabase() {
     const supabase = getClient();
@@ -31,6 +31,7 @@ async function getRuntimeConfigFromSupabase() {
         const k = row.key?.trim();
         if (!k) continue;
         if (k === 'model' && row.value_text != null) config.model = String(row.value_text).trim() || undefined;
+        if (k === 'voice_model' && row.value_text != null) config.voice_model = String(row.value_text).trim() || undefined;
         if (k === 'max_completion_tokens' && row.value_int != null) config.max_completion_tokens = Number(row.value_int);
         if (k === 'max_prompt_tokens' && row.value_int != null) config.max_prompt_tokens = Number(row.value_int);
     }

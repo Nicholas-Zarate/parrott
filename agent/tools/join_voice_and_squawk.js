@@ -4,7 +4,8 @@
 
 const { tool } = require('ai');
 const z = require('zod');
-const { playInVoiceChannel, playInSession, getSession } = require('../abilities/voice');
+const { getSession } = require('../abilities/voice/session');
+const { playInVoiceChannel, playInSession } = require('../abilities/voice/play');
 const { generateHollaResponse, FALLBACK_PHRASE } = require('../abilities/voice/holla');
 const { getToolDescription, LOG_PREFIX, resolveVoiceChannelForMemberWithFetch } = require('./helpers/helpers');
 

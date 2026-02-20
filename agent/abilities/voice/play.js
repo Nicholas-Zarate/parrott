@@ -54,7 +54,8 @@ async function playInVoiceChannel(client, voiceChannel, options) {
 
     if (options.type === 'tts') {
         const voiceSettings = options.voiceSettings || {};
-        const ttsResult = await generateAudio(options.text || '', voiceSettings, { logAsError: options.logAsError });
+        const ttsOpts = { logAsError: options.logAsError, ...(options.ttsOpts || {}) };
+        const ttsResult = await generateAudio(options.text || '', voiceSettings, ttsOpts);
         if (!ttsResult.success) {
             console.log(`${LOG_PREFIX} TTS failed: ${ttsResult.error}`);
             return { success: false, error: ttsResult.error };
@@ -164,9 +165,10 @@ const SQUAWK_PHRASE = 'Hey everyone, okay bye!';
  * @param {{ connection: object, audioPlayer: object }} session - From voice session manager
  * @param {string} text - Text to speak via TTS
  * @param {{ stability?: number, similarity_boost?: number, style?: number, use_speaker_boost?: boolean, speed?: number }} [voiceSettings] - Optional TTS settings
+ * @param {{ useQuickCommentModel?: boolean }} [ttsOpts] - Optional TTS options (e.g. useQuickCommentModel for Flash/low-latency)
  * @returns {Promise<{ success: boolean, error?: string }>}
  */
-async function playInSession(session, text, voiceSettings = {}) {
+async function playInSession(session, text, voiceSettings = {}, ttsOpts = {}) {
     if (!session?.connection || !session?.audioPlayer) {
         return { success: false, error: 'Invalid session (missing connection or audioPlayer).' };
     }
@@ -174,6 +176,7 @@ async function playInSession(session, text, voiceSettings = {}) {
         type: 'tts',
         text,
         voiceSettings,
+        ttsOpts,
         keepAlive: true,
         connection: session.connection,
         player: session.audioPlayer,
