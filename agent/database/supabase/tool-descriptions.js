@@ -18,7 +18,7 @@ async function getToolDescriptionsFromSupabase() {
 
     const { data, error } = await supabase
         .from(TABLE)
-        .select('tool_slug, description, example_command, example_trigger_phrases, is_active');
+        .select('tool_slug, description, example_command, example_trigger_phrases, is_active, response_delivery');
 
     if (error) {
         console.error('[Tool descriptions] Supabase error:', error.message);
@@ -35,11 +35,14 @@ async function getToolDescriptionsFromSupabase() {
         const example_trigger_phrases = Array.isArray(rawPhrases)
             ? rawPhrases.filter((s) => typeof s === 'string')
             : [];
+        const rawDelivery = row.response_delivery;
+        const response_delivery = (rawDelivery === 'voice' || rawDelivery === 'both') ? rawDelivery : 'text';
         map[slug] = {
             description: String(row.description ?? ''),
             example_command: row.example_command != null ? String(row.example_command).trim() : '',
             example_trigger_phrases,
             enabled: row.is_active === true,
+            response_delivery,
         };
     }
 
