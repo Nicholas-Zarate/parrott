@@ -21,6 +21,8 @@ type ToolMetaData = {
   tool_slug: string;
   description: string;
   is_active: boolean;
+  /** When this tool was used: deliver reply as text, voice, or both. Admin-only to edit. */
+  response_delivery?: string | null;
   /** Parameter name -> description (from tools_meta_data.parameter_descriptions jsonb). */
   parameter_descriptions?: Record<string, string> | null;
 };
@@ -85,6 +87,7 @@ export function PersonalityTabs({
             <button
               type="button"
               onClick={() => setActiveTab(TAB_PROMPT_TOOLS)}
+              data-testid="personality-tools-tab"
               className={`rounded-t-md border px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === TAB_PROMPT_TOOLS
                   ? "border-border border-b-transparent bg-background text-foreground -mb-px"
@@ -192,7 +195,7 @@ export function PersonalityTabs({
               <p className="mb-2 text-xs text-muted-foreground">
                 Per-tool description text shown to the model. Used when PARROT_TONES_SOURCE=supabase.
               </p>
-              <ToolDescriptionsList tools={toolDescriptions} />
+              <ToolDescriptionsList tools={toolDescriptions} isAdmin={perms.isAdmin} />
             </section>
           )}
 

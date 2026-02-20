@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:admin-auth": "cross-env PLAYWRIGHT_RECORD_ADMIN=1 playwright test test/auth-setup.test.ts --project=default --headed"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
@@ -23,6 +24,7 @@
     "tailwind-merge": "^3.4.1"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "@playwright/test": "^1.49.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
