@@ -93,60 +93,72 @@ function ToneRow({
   const showEnabledSwitch = isMediaTone && canEdit && onToggleActive != null;
 
   return (
-    <li className="flex flex-wrap items-center gap-2 px-4 py-3 bg-card hover:bg-muted/30 transition-colors">
-      <span className="font-medium text-foreground min-w-[7rem]">
-        {tone.slug === "vc" ? (
-          <span className="flex items-center gap-1.5">
-            <Mic className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            {getToneTypeLabel(tone.slug)}
-          </span>
-        ) : SYSTEM_PROMPT_SLUGS.has(tone.slug) ? (
-          <span className="flex items-center gap-1.5">
-            <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            {getToneTypeLabel(tone.slug)}
-          </span>
-        ) : (
-          getToneTypeLabel(tone.slug)
-        )}
-      </span>
-      <div className="flex flex-1 flex-wrap items-center gap-1.5">
-        {SYSTEM_PROMPT_SLUGS.has(tone.slug) && (
-          <Badge variant="outline" className="text-[10px]">
-            System prompt block
-          </Badge>
-        )}
-        {!tone.is_active && (
-          <Badge variant="outline" className="text-[10px]">
-            Inactive
-          </Badge>
-        )}
-        {tone.max_words != null && (
-          <Badge
-            variant={SLUG_STYLE[tone.slug] ?? "outline"}
-            className="text-[10px]"
-          >
-            max {tone.max_words} words
-          </Badge>
-        )}
-        {Array.isArray(tone.keywords) &&
-          tone.keywords.slice(0, 4).map((kw) => (
-            <Badge
-              key={kw}
-              variant="outline"
-              className="text-[10px] capitalize"
-            >
-              {kw.replace(/-/g, " ")}
+    <li className="flex flex-col gap-2 px-4 py-3 bg-card hover:bg-muted/30 transition-colors">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-foreground min-w-[7rem]">
+          {tone.slug === "vc" ? (
+            <span className="flex items-center gap-1.5">
+              <Mic className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              {getToneTypeLabel(tone.slug)}
+            </span>
+          ) : SYSTEM_PROMPT_SLUGS.has(tone.slug) ? (
+            <span className="flex items-center gap-1.5">
+              <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              {getToneTypeLabel(tone.slug)}
+            </span>
+          ) : (
+            getToneTypeLabel(tone.slug)
+          )}
+        </span>
+        <div className="flex flex-1 flex-wrap items-center gap-1.5">
+          {SYSTEM_PROMPT_SLUGS.has(tone.slug) && (
+            <Badge variant="outline" className="text-[10px]">
+              System prompt block
             </Badge>
-          ))}
-        {Array.isArray(tone.keywords) && tone.keywords.length > 4 && (
-          <Badge variant="outline" className="text-[10px]">
-            +{tone.keywords.length - 4}
-          </Badge>
-        )}
+          )}
+          {!tone.is_active && (
+            <Badge variant="outline" className="text-[10px]">
+              Inactive
+            </Badge>
+          )}
+          {tone.max_words != null && (
+            <Badge
+              variant={SLUG_STYLE[tone.slug] ?? "outline"}
+              className="text-[10px]"
+            >
+              max {tone.max_words} words
+            </Badge>
+          )}
+          {Array.isArray(tone.keywords) &&
+            tone.keywords.slice(0, 4).map((kw) => (
+              <Badge
+                key={kw}
+                variant="outline"
+                className="text-[10px] capitalize"
+              >
+                {kw.replace(/-/g, " ")}
+              </Badge>
+            ))}
+          {Array.isArray(tone.keywords) && tone.keywords.length > 4 && (
+            <Badge variant="outline" className="text-[10px]">
+              +{tone.keywords.length - 4}
+            </Badge>
+          )}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 bg-orange-300 hover:bg-orange-100"
+          onClick={() => onView(tone)}
+          aria-label={`View ${getToneTypeLabel(tone.slug)} details`}
+        >
+          View
+        </Button>
       </div>
       {showEnabledSwitch && (
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex items-center gap-2">
           <Switch
+            variant="media"
             id={`tone-active-${tone.id}`}
             checked={tone.is_active}
             onCheckedChange={(checked) => onToggleActive?.(tone, checked)}
@@ -157,15 +169,6 @@ function ToneRow({
           </Label>
         </div>
       )}
-      <Button
-        variant="outline"
-        size="sm"
-        className="shrink-0 bg-orange-300 hover:bg-orange-100"
-        onClick={() => onView(tone)}
-        aria-label={`View ${getToneTypeLabel(tone.slug)} details`}
-      >
-        View
-      </Button>
     </li>
   );
 }

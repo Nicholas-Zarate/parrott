@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -108,6 +109,19 @@ function togglesToDelivery(text: boolean, voice: boolean): ResponseDelivery {
   return "text";
 }
 
+/** Resolve delivery when toggling one channel; ensures we never persist both off (backend only has text | voice | both). */
+function nextDeliveryFromTextToggle(textChecked: boolean, voice: boolean): ResponseDelivery {
+  if (textChecked) return togglesToDelivery(true, voice);
+  return "voice"; // turning text off -> voice-only (at least one channel on)
+}
+
+function nextDeliveryFromVoiceToggle(text: boolean, voiceChecked: boolean): ResponseDelivery {
+  if (voiceChecked) return togglesToDelivery(text, true);
+  return "text"; // turning voice off -> text-only (at least one channel on)
+}
+
+const DEBOUNCE_MS = 400;
+
 export function ToolDescriptionsList({
   tools,
   isAdmin = false,
@@ -117,90 +131,130 @@ export function ToolDescriptionsList({
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<ToolDescription | null>(null);
-  const [saving, setSaving] = useState(false);
+  /** Tool slugs currently being saved; only those rows are disabled. Allows multiple tools to save in parallel. */
+  const [savingSlugs, setSavingSlugs] = useState<Set<string>>(new Set());
   const [overrides, setOverrides] = useState<Record<string, string>>({});
+
+  const debounceTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingValueRef = useRef<Record<string, ResponseDelivery>>({});
+
+  useEffect(() => {
+    return () => {
+      Object.values(debounceTimeoutsRef.current).forEach(clearTimeout);
+      debounceTimeoutsRef.current = {};
+    };
+  }, []);
 
   const getResponseDelivery = (t: ToolDescription) =>
     overrides[t.tool_slug] ?? t.response_delivery ?? "text";
 
-  const setResponseDelivery = async (toolSlug: string, value: ResponseDelivery) => {
-    if (!isAdmin || saving) return;
-    setSaving(true);
+  const flushToSupabase = async (toolSlug: string, value: ResponseDelivery) => {
+    if (savingSlugs.has(toolSlug)) return;
+    setSavingSlugs((prev) => new Set(prev).add(toolSlug));
     const supabase = createClient();
     const { error } = await supabase.rpc("update_tool_response_delivery", {
       p_tool_slug: toolSlug,
       p_response_delivery: value,
     });
-    setSaving(false);
+    setSavingSlugs((prev) => {
+      const next = new Set(prev);
+      next.delete(toolSlug);
+      return next;
+    });
     if (error) {
       console.error("[ToolDescriptionsList] RPC error:", error.message);
-      return;
+      toast.error("Failed to update delivery: " + error.message);
+      setOverrides((prev) => {
+        const next = { ...prev };
+        delete next[toolSlug];
+        return next;
+      });
     }
+  };
+
+  const setResponseDelivery = (toolSlug: string, value: ResponseDelivery) => {
+    if (!isAdmin) return;
     setOverrides((prev) => ({ ...prev, [toolSlug]: value }));
+    pendingValueRef.current[toolSlug] = value;
+    const existing = debounceTimeoutsRef.current[toolSlug];
+    if (existing != null) clearTimeout(existing);
+    debounceTimeoutsRef.current[toolSlug] = setTimeout(() => {
+      delete debounceTimeoutsRef.current[toolSlug];
+      const valueToSend = pendingValueRef.current[toolSlug];
+      delete pendingValueRef.current[toolSlug];
+      if (valueToSend != null) flushToSupabase(toolSlug, valueToSend);
+    }, DEBOUNCE_MS);
   };
 
   if (tools.length === 0) return null;
 
   return (
     <>
-      <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+      <ul data-testid="tool-descriptions-list" className="divide-y divide-border rounded-lg border border-border overflow-hidden">
         {tools.map((t) => (
           <li
             key={t.id}
-            className={`flex flex-wrap items-center gap-2 px-4 py-3 transition-colors ${t.is_active ? "bg-card hover:bg-muted/30" : "bg-muted/20 hover:bg-muted/40"}`}
+            className={`flex flex-col gap-2 px-4 py-3 transition-colors ${t.is_active ? "bg-card hover:bg-muted/30" : "bg-muted/20 hover:bg-muted/40"}`}
           >
-            <Badge variant="outline" className="font-mono text-xs">
-              {t.tool_slug}
-            </Badge>
-            <Badge variant={t.is_active ? "default" : "presence"} className="shrink-0 text-xs">
-              {t.is_active ? "Enabled" : "Disabled"}
-            </Badge>
-            {isAdmin ? (
-              <div className="flex items-center gap-3 shrink-0">
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="font-mono text-xs">
+                {t.tool_slug}
+              </Badge>
+              <Badge variant={t.is_active ? "default" : "presence"} className="shrink-0 text-xs">
+                {t.is_active ? "Enabled" : "Disabled"}
+              </Badge>
+              {!isAdmin && (
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {responseDeliveryLabel(getResponseDelivery(t))}
+                </span>
+              )}
+              <span className="flex-1 min-w-0 text-sm text-muted-foreground truncate max-w-md">
+                {(t.description || "").slice(0, 80)}
+                {(t.description || "").length > 80 ? "…" : ""}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto shrink-0 bg-orange-300 hover:bg-orange-100"
+                onClick={() => {
+                  setSelected(t);
+                  setOpen(true);
+                }}
+                aria-label={`View ${t.tool_slug} description`}
+              >
+                View
+              </Button>
+            </div>
+            {isAdmin && (
+              <div className="flex w-full flex-col items-end gap-3">
+                <label className="flex items-start  gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <span>Text</span>
                   <Switch
+                    variant="media"
                     checked={deliveryToToggles(getResponseDelivery(t)).text}
                     onCheckedChange={(checked) => {
                       const { voice } = deliveryToToggles(getResponseDelivery(t));
-                      setResponseDelivery(t.tool_slug, togglesToDelivery(checked, voice));
+                      setResponseDelivery(t.tool_slug, nextDeliveryFromTextToggle(checked, voice));
                     }}
-                    disabled={saving}
+                    disabled={savingSlugs.has(t.tool_slug)}
                   />
-                  <span>Text</span>
+                  
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <label className="flex items-start gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <span>Voice</span>
                   <Switch
+                    variant="media"
                     checked={deliveryToToggles(getResponseDelivery(t)).voice}
                     onCheckedChange={(checked) => {
                       const { text } = deliveryToToggles(getResponseDelivery(t));
-                      setResponseDelivery(t.tool_slug, togglesToDelivery(text, checked));
+                      setResponseDelivery(t.tool_slug, nextDeliveryFromVoiceToggle(text, checked));
                     }}
-                    disabled={saving}
+                    disabled={savingSlugs.has(t.tool_slug)}
                   />
-                  <span>Voice</span>
+                  
                 </label>
               </div>
-            ) : (
-              <span className="text-xs text-muted-foreground shrink-0">
-                {responseDeliveryLabel(getResponseDelivery(t))}
-              </span>
             )}
-            <span className="flex-1 min-w-0 text-sm text-muted-foreground truncate max-w-md">
-              {(t.description || "").slice(0, 80)}
-              {(t.description || "").length > 80 ? "…" : ""}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto shrink-0 bg-orange-300 hover:bg-orange-100"
-              onClick={() => {
-                setSelected(t);
-                setOpen(true);
-              }}
-              aria-label={`View ${t.tool_slug} description`}
-            >
-              View
-            </Button>
           </li>
         ))}
       </ul>
@@ -218,23 +272,25 @@ export function ToolDescriptionsList({
                     <div className="flex items-center gap-4">
                       <label className="flex items-center gap-2 text-sm cursor-pointer">
                         <Switch
+                          variant="media"
                           checked={deliveryToToggles(getResponseDelivery(selected)).text}
                           onCheckedChange={(checked) => {
                             const { voice } = deliveryToToggles(getResponseDelivery(selected));
-                            setResponseDelivery(selected.tool_slug, togglesToDelivery(checked, voice));
+                            setResponseDelivery(selected.tool_slug, nextDeliveryFromTextToggle(checked, voice));
                           }}
-                          disabled={saving}
+                          disabled={savingSlugs.has(selected.tool_slug)}
                         />
                         <span>Text</span>
                       </label>
                       <label className="flex items-center gap-2 text-sm cursor-pointer">
                         <Switch
+                          variant="media"
                           checked={deliveryToToggles(getResponseDelivery(selected)).voice}
                           onCheckedChange={(checked) => {
                             const { text } = deliveryToToggles(getResponseDelivery(selected));
-                            setResponseDelivery(selected.tool_slug, togglesToDelivery(text, checked));
+                            setResponseDelivery(selected.tool_slug, nextDeliveryFromVoiceToggle(text, checked));
                           }}
-                          disabled={saving}
+                          disabled={savingSlugs.has(selected.tool_slug)}
                         />
                         <span>Voice</span>
                       </label>

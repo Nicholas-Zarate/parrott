@@ -87,6 +87,7 @@ export function PersonalityTabs({
             <button
               type="button"
               onClick={() => setActiveTab(TAB_PROMPT_TOOLS)}
+              data-testid="personality-tools-tab"
               className={`rounded-t-md border px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === TAB_PROMPT_TOOLS
                   ? "border-border border-b-transparent bg-background text-foreground -mb-px"
