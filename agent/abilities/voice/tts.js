@@ -20,6 +20,7 @@ const DEFAULT_VOICE_ID = 'JPJCjRI8jfRp9Aoc5Za9';
 const ELEVENLABS_BASE = 'https://api.elevenlabs.io/v1';
 const OUTPUT_FORMAT = 'mp3_44100_128';
 const MODEL_ID = 'eleven_multilingual_v2';
+const QUICK_COMMENT_MODEL_ID = process.env.TTS_QUICK_COMMENT_MODEL || 'eleven_flash_v2_5';
 
 /** Default voice settings: [stability, similarity_boost, style, speaker_boost] → 55, 95, 90, 85 (0–100 scale → 0–1). */
 const DEFAULT_STABILITY = 0.55;
@@ -135,11 +136,12 @@ function mergeVoiceSettings(overrides = {}) {
  *
  * @param {string} text - Text to speak (e.g. "what ninja, squack, bye")
  * @param {Object} [voiceSettingsOverrides] - Optional overrides: stability, similarity_boost, style, use_speaker_boost, speed (merged with env defaults)
- * @param {{ logAsError?: boolean }} [opts] - When true, log "generating audio" and "audio ready" at error level (e.g. when speaking a fallback message)
+ * @param {{ logAsError?: boolean, useQuickCommentModel?: boolean }} [opts] - logAsError: log at error level; useQuickCommentModel: use Flash model for lower latency (e.g. quick-comment job)
  * @returns {Promise<{ success: true, path: string } | { success: false, error: string }>}
  */
 async function generateAudio(text, voiceSettingsOverrides = {}, opts = {}) {
     const logAsError = opts.logAsError === true;
+    const useQuickCommentModel = opts.useQuickCommentModel === true;
     const logLine = (msg) => (logAsError ? console.error(msg) : console.log(msg));
     const trimmed = typeof text === 'string' ? text.trim() : '';
     if (!trimmed) {
@@ -157,10 +159,11 @@ async function generateAudio(text, voiceSettingsOverrides = {}, opts = {}) {
     }
 
     const voiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || DEFAULT_VOICE_ID;
+    const modelId = useQuickCommentModel ? QUICK_COMMENT_MODEL_ID : MODEL_ID;
     const fromText = deriveVoiceSettingsFromText(trimmed);
     const voice_settings = mergeVoiceSettings({ ...fromText, ...voiceSettingsOverrides });
     const url = `${ELEVENLABS_BASE}/text-to-speech/${voiceId}?output_format=${OUTPUT_FORMAT}`;
-    logLine(`${LOG_PREFIX} generating audio for text="${textToSpeak.slice(0, 60)}${textToSpeak.length > 60 ? '…' : ''}" (voice_id=${voiceId} stability=${voice_settings.stability} similarity=${voice_settings.similarity_boost} style=${voice_settings.style} speaker_boost=${voice_settings.use_speaker_boost} speed=${voice_settings.speed})`);
+    logLine(`${LOG_PREFIX} generating audio for text="${textToSpeak.slice(0, 60)}${textToSpeak.length > 60 ? '…' : ''}" (model=${modelId} voice_id=${voiceId} stability=${voice_settings.stability} similarity=${voice_settings.similarity_boost} style=${voice_settings.style} speaker_boost=${voice_settings.use_speaker_boost} speed=${voice_settings.speed})`);
 
     let res;
     try {
@@ -172,7 +175,7 @@ async function generateAudio(text, voiceSettingsOverrides = {}, opts = {}) {
             },
             body: JSON.stringify({
                 text: textToSpeak,
-                model_id: MODEL_ID,
+                model_id: modelId,
                 voice_settings: {
                     stability: voice_settings.stability,
                     similarity_boost: voice_settings.similarity_boost,

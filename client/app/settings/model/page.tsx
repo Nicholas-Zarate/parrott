@@ -12,7 +12,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePermissions } from "@/lib/hooks/use-permissions";
-import { fetchRuntimeConfig, updateRuntimeConfigModel } from "@/actions/settings/runtimeConfig";
+
+import {
+  fetchRuntimeConfig,
+  updateRuntimeConfigModel,
+  updateRuntimeConfigVoiceModel,
+} from "@/lib/runtime-config";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +34,7 @@ const MODEL_OPTIONS: { value: string; label: string }[] = [
 
 type ModelState =
   | { status: "loading" }
-  | { status: "success"; model: string | null }
+  | { status: "success"; model: string | null; voiceModel: string | null }
   | { status: "error"; error: string };
 
 export default function ModelPage() {
@@ -39,12 +44,20 @@ export default function ModelPage() {
 
   const load = useCallback(async () => {
     setState({ status: "loading" });
-    const result = await fetchRuntimeConfig();
-    if (result.error) {
-      setState({ status: "error", error: result.error });
-      return;
-    }
-    setState({ status: "success", model: result.data?.model ?? null });
+    fetchRuntimeConfig()
+      .then((config) =>
+        setState({
+          status: "success",
+          model: config.model ?? null,
+          voiceModel: config.voiceModel ?? null,
+        })
+      )
+      .catch((err) =>
+        setState({
+          status: "error",
+          error: err instanceof Error ? err.message : "Failed to load config",
+        })
+      );
   }, []);
 
   useEffect(() => {
@@ -64,7 +77,19 @@ export default function ModelPage() {
       return;
     }
     toast.success("Model updated.");
-    setState({ status: "success", model: value });
+    setState((s) => (s.status === "success" ? { ...s, model: value } : s));
+  }
+
+  async function handleVoiceModelChange(value: string) {
+    setSaving(true);
+    const { error } = await updateRuntimeConfigVoiceModel(value);
+    setSaving(false);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    toast.success("Voice model updated.");
+    setState((s) => (s.status === "success" ? { ...s, voiceModel: value } : s));
   }
 
   if (perms.loading) {
@@ -107,15 +132,22 @@ export default function ModelPage() {
   }
 
   const currentModel = state.status === "success" ? state.model : null;
+  const currentVoiceModel = state.status === "success" ? state.voiceModel : null;
   const inList = currentModel && MODEL_OPTIONS.some((o) => o.value === currentModel);
   const displayValue = currentModel ?? "";
+  const voiceInList = currentVoiceModel && MODEL_OPTIONS.some((o) => o.value === currentVoiceModel);
+  const displayVoiceValue = currentVoiceModel ?? "";
   const options = [...MODEL_OPTIONS];
   if (currentModel && !inList) {
     options.push({ value: currentModel, label: `Current: ${currentModel}` });
   }
+  const voiceOptions = [...MODEL_OPTIONS];
+  if (currentVoiceModel && !voiceInList) {
+    voiceOptions.push({ value: currentVoiceModel, label: `Current: ${currentVoiceModel}` });
+  }
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-8 max-w-2xl space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -142,6 +174,42 @@ export default function ModelPage() {
               </SelectTrigger>
               <SelectContent>
                 {options.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Cpu className="size-5" aria-hidden />
+            Voice model
+          </CardTitle>
+          <CardDescription>
+            Model used for voice chat (e.g. &ldquo;hey parrot&rdquo;). Use a
+            faster model for lower latency. Falls back to the main model above
+            if not set. Changes apply after the bot restarts or reloads config.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {state.status === "loading" ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : (
+            <Select
+              value={displayVoiceValue}
+              onValueChange={handleVoiceModelChange}
+              disabled={saving}
+            >
+              <SelectTrigger className="w-full max-w-sm">
+                <SelectValue placeholder="Select voice model" />
+              </SelectTrigger>
+              <SelectContent>
+                {voiceOptions.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
                   </SelectItem>

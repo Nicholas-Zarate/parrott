@@ -6,10 +6,23 @@ const parrotConfig = require('../../config/parrot');
 const { getOpenAIErrorMessage } = require('../../commands/roast/openai');
 const { chatWithTools } = require('../../ai-sdk/with-tools');
 const { saveConversation, getToolsCalledFromSteps } = require('../../database/supabase/conversation-history');
-const { playInVoiceChannel } = require('../voice');
+const { playInVoiceChannel, getSession, startSession, playInSession } = require('../voice');
+const { startPipeline } = require('../voice/pipeline');
+const { resolveVoiceChannelForMemberWithFetch } = require('../../tools/helpers/helpers');
 
 /** Max length of reply text sent to TTS when user asks for "in voice" / "in VC". */
 const VOICE_REPLY_MAX_LEN = 200;
+
+/** Matches "hang out in voice" / "hang out in voice chat" / "hang out in vc" so we can run hang_out_in_voice without relying on the model. */
+const HANG_OUT_IN_VOICE_INTENT = /\bhang\s*out\s*(in\s+)?(voice\s*chat|voice|vc)\b/i;
+
+/** Tools that always use voice when the user is in a VC (with text fallback). Overrides response_delivery for these tools. */
+const VOICE_INHERENT_TOOLS = [
+    'join_voice_and_squawk',
+    'hang_out_in_voice',
+    'start_listening',
+    'stop_listening',
+];
 
 /**
  * Runs when someone mentions the bot in an allowed channel.
@@ -78,6 +91,51 @@ async function onMention(message, client) {
         await message.reply("Text media is disabled. Enable it on the Personality page to use the parrot.").catch(() => null);
         return;
     }
+
+    // Direct intent: "hang out in voice" — run hang_out_in_voice ourselves so the model cannot skip the tool
+    const trimmedContent = (message.content || '').trim();
+    if (message.guild && HANG_OUT_IN_VOICE_INTENT.test(trimmedContent)) {
+        const guild = message.guild;
+        const member = message.member ?? await guild.members.fetch(message.author?.id).catch(() => null);
+        const voiceChannel = member ? await resolveVoiceChannelForMemberWithFetch(guild, member) : null;
+        let replyText;
+        if (!voiceChannel) {
+            replyText = "You're not in a voice channel. Join a voice channel first, then ask again.";
+        } else {
+            const session = getSession(guild.id);
+            if (session) {
+                replyText = "I'm already in your voice channel. Say \"start listening\" if you want me to listen.";
+            } else {
+                const result = await startSession(client, guild, voiceChannel, {
+                    textChannelId: message.channel?.id ?? null,
+                    startListening: true,
+                });
+                if (!result.success) {
+                    replyText = result.error || 'Failed to start session.';
+                } else {
+                    startPipeline(result.session, client);
+                    try {
+                        await playInSession(result.session, "I'm here, listening.");
+                    } catch (_) {}
+                    replyText = "I'm in your voice channel and listening. Say \"stop listening\" to pause, or \"start listening\" to resume.";
+                }
+            }
+        }
+        const replyMsg = await message.reply(replyText).catch(() => null);
+        if (replyMsg) {
+            await saveConversation({
+                previous_message_id: message.id,
+                reply_message_id: replyMsg.id,
+                channel_id: message.channelId,
+                guild_id: message.guildId ?? null,
+                user_text: fullUserContent,
+                response_text: replyText,
+                tools_called: ['hang_out_in_voice'],
+            });
+        }
+        return;
+    }
+
     const messages = [
         { role: 'system', content: systemPrompt },
         ...(usePreviousTurn
@@ -106,23 +164,40 @@ async function onMention(message, client) {
             maxTokens: Math.max(parrotConfig.max_completion_tokens ?? 256, 400),
         });
         const finalContent = text?.trim() || 'SQUAWK.';
-        await replyMsg.edit(finalContent);
+        const toolsCalled = getToolsCalledFromSteps(steps);
+        const toolMetadata = parrotConfig.getToolMetadata() || {};
 
-        const wantsVoice = /\b(in voice chat|in voice|in vc)\b/i.test(fullUserContent || message.content || '');
-        if (wantsVoice && message.guild) {
-            const member = message.member ?? await message.guild.members.fetch(message.author?.id).catch(() => null);
-            const voiceChannel = member?.voice?.channel;
-            if (voiceChannel) {
-                const textToSpeak = finalContent.length > VOICE_REPLY_MAX_LEN
-                    ? finalContent.slice(0, VOICE_REPLY_MAX_LEN).trim() + '…'
-                    : finalContent;
-                playInVoiceChannel(client, voiceChannel, { type: 'tts', text: textToSpeak }).catch((err) => {
-                    console.error('[Mention Error] Voice delivery failed:', err?.message || err);
-                });
-            }
+        const wantsVoiceFromUser = /\b(in voice chat|in voice|in vc)\b/i.test(fullUserContent || message.content || '');
+        const anyToolWantsVoice = toolsCalled.length > 0 && toolsCalled.some((name) => {
+            const meta = toolMetadata[name];
+            return meta && (meta.response_delivery === 'voice' || meta.response_delivery === 'both');
+        });
+        const memberForVoice = message.guild ? (message.member ?? await message.guild.members.fetch(message.author?.id).catch(() => null)) : null;
+        const voiceChannel = memberForVoice?.voice?.channel;
+        const anyVoiceInherentTool = toolsCalled.length > 0 && toolsCalled.some((name) => VOICE_INHERENT_TOOLS.includes(name));
+        const doVoice = wantsVoiceFromUser || anyToolWantsVoice || (anyVoiceInherentTool && !!voiceChannel);
+
+        const anyToolTextOnly = toolsCalled.length > 0 && toolsCalled.every((name) => {
+            const meta = toolMetadata[name];
+            return meta && meta.response_delivery === 'voice';
+        });
+        const doText = !anyToolTextOnly;
+
+        if (doText) {
+            await replyMsg.edit(finalContent);
+        } else {
+            await replyMsg.edit('—').catch(() => {});
         }
 
-        const toolsCalled = getToolsCalledFromSteps(steps);
+        if (doVoice && message.guild && voiceChannel) {
+            const textToSpeak = finalContent.length > VOICE_REPLY_MAX_LEN
+                ? finalContent.slice(0, VOICE_REPLY_MAX_LEN).trim() + '…'
+                : finalContent;
+            playInVoiceChannel(client, voiceChannel, { type: 'tts', text: textToSpeak }).catch((err) => {
+                console.error('[Mention Error] Voice delivery failed:', err?.message || err);
+            });
+        }
+
         await saveConversation({
             previous_message_id: message.id,
             reply_message_id: replyMsg.id,

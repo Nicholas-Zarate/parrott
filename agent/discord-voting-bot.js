@@ -6,9 +6,11 @@ const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const poll = require('./commands/poll');
 const analysis = require('./analysis');
 const roast = require('./commands/roast');
+const voice = require('./commands/voice');
 const mention = require('./abilities/mention');
 const { isBotMentionedInContent } = require('./abilities/mention/format');
 const { startScheduler } = require('./jobs/scheduler');
+const { startRestartRequestConsumer } = require('./jobs/restart-request-consumer');
 const { handlePresenceUpdate, handleVoiceStateUpdate, init: initActivityListener } = require('./activity/listener');
 
 /** Discord permission integer for the bot invite URL (OAuth2). Override with INVITE_PERMISSIONS in .env if needed. Voice (squawk) needs Connect + Speak; re-invite with permissions that include those if the bot cannot join VC. */
@@ -52,7 +54,8 @@ client.on('ready', async () => {
     const pollCommands = poll.getPollCommands();
     const analysisCommandsList = analysis.getAnalysisCommands();
     const roastCommandsList = roast.getRoastCommands();
-    const allCommands = [...pollCommands, ...analysisCommandsList, ...roastCommandsList];
+    const voiceCommandsList = voice.getVoiceCommands();
+    const allCommands = [...pollCommands, ...analysisCommandsList, ...roastCommandsList, ...voiceCommandsList];
     try {
         await client.application.commands.set(allCommands);
         console.log('Slash commands registered!');
@@ -69,6 +72,9 @@ client.on('ready', async () => {
 
     // Initialize activity listener (presenceUpdate triggers).
     initActivityListener();
+
+    // Poll restart_requests and send to Discord (voice or #parrot).
+    startRestartRequestConsumer(client);
     // Request guild members with presences so the gateway sends us presenceUpdate events (e.g. streaming).
     // Without this, Discord often does not send presence for members in larger/lazy-loaded guilds.
     for (const [guildId, guild] of client.guilds.cache) {
@@ -174,6 +180,9 @@ client.on('interactionCreate', async interaction => {
         }
         if (name === 'roast') {
             return roast.handleRoast(interaction, client);
+        }
+        if (name === 'voice') {
+            return voice.handleVoiceCommand(interaction, client);
         }
     }
 
