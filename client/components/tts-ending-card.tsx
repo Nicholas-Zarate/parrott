@@ -63,7 +63,7 @@ export function TtsEndingCard({ canEdit, compact, onSave }: TtsEndingCardProps) 
       setTtsEndingInput(state.ttsEnding ?? "");
       setTtsEndingProbabilityInput(state.ttsEndingProbability ?? 100);
     }
-  }, [state.status, state.ttsEnding, state.ttsEndingProbability]);
+  }, [state]);
 
   async function handleTtsEndingSave() {
     if (state.status !== "success") return;
