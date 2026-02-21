@@ -1,47 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { LogIn, LogOut } from "lucide-react";
+import { useState } from "react";
+import { LogIn, LogOut, Terminal } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import type { User } from "@supabase/supabase-js";
+import { useAppUser } from "@/lib/auth-context";
 
 /**
  * Sidebar / nav auth widget.
- * Shows "Login with Discord" when logged out.
- * Shows Discord avatar + name + logout when logged in.
+ * Uses the generic app user (Discord and/or console). Shows "Login with Discord"
+ * when not authenticated; otherwise shows Discord avatar/name or "Console user".
  */
 export function AuthUser({ collapsed }: { collapsed?: boolean }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const supabase = createClient();
-
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      setLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const { user, loading } = useAppUser();
 
   if (loading) return null;
 
-  if (!user) {
+  const hasDiscord = user?.discord && (user.discord.id ?? user.discord.preferred_username);
+  const hasConsole = user?.consoleUser === true;
+
+  if (!hasDiscord && !hasConsole) {
     return <LoginButton collapsed={collapsed} />;
   }
 
-  const meta = user.user_metadata ?? {};
-  const name: string =
-    meta.full_name || meta.name || meta.preferred_username || "User";
-  const avatarUrl: string | null = meta.avatar_url ?? null;
+  const name = hasDiscord
+    ? (user!.discord!.full_name ||
+        user!.discord!.name ||
+        user!.discord!.preferred_username ||
+        "User")
+    : "Console user";
+  const avatarUrl = user?.discord?.avatar_url ?? null;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -62,7 +50,7 @@ export function AuthUser({ collapsed }: { collapsed?: boolean }) {
           />
         ) : (
           <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[10px] font-semibold text-sidebar-accent-foreground">
-            {name.charAt(0).toUpperCase()}
+            {hasDiscord ? name.charAt(0).toUpperCase() : <Terminal className="size-3" aria-hidden />}
           </span>
         )}
         {!collapsed && (
@@ -115,10 +103,14 @@ function LoginButton({ collapsed }: { collapsed?: boolean }) {
 }
 
 function LogoutButton({ collapsed }: { collapsed?: boolean }) {
+  const [busy, setBusy] = useState(false);
+
   async function handleLogout() {
+    setBusy(true);
     const supabase = createClient();
     await supabase.auth.signOut();
-    window.location.href = "/";
+    await fetch("/api/logout", { method: "POST" });
+    window.location.href = "/login";
   }
 
   return (
@@ -126,6 +118,7 @@ function LogoutButton({ collapsed }: { collapsed?: boolean }) {
       variant="ghost"
       size="sm"
       onClick={handleLogout}
+      disabled={busy}
       title="Logout"
       className={
         collapsed

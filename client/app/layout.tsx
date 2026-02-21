@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { DesktopSideNav, MobileNav } from "@/components/side-nav";
+import { AuthProvider } from "@/lib/auth-context";
+import { AppShell } from "@/components/app-shell";
 import { Toaster } from "@/components/ui/sonner";
 import { ViewportHeightProvider } from "@/components/viewport-height-provider";
 import "./globals.css";
@@ -41,14 +42,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased`}
       >
         <ViewportHeightProvider />
-        <MobileNav />
-        <div className="root-layout flex h-dvh flex-col md:flex-row overflow-hidden">
-          <DesktopSideNav />
-          {/* Reserves space for fixed mobile app bar (56px + safe-area); no offset on desktop */}
-          <main className="flex-1 min-h-0 overflow-auto bg-background pt-[calc(3.5rem+env(safe-area-inset-top,0px))] md:pt-0">
-            {children}
-          </main>
-        </div>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
         <Toaster position="bottom-right" />
       </body>
     </html>

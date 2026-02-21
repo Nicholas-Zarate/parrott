@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExpandableText } from "@/components/expandable-text";
-import { LoginPromptModal } from "@/components/login-prompt-modal";
 import { Clock, Megaphone } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -134,8 +133,6 @@ export default async function Home() {
           </div>
         </section>
       ) : null}
-
-      <LoginPromptModal />
     </div>
   );
 }
