@@ -13,7 +13,8 @@ import {
   Activity,
   ChevronDown,
   ChevronRight,
-  Building2,
+  Settings,
+  Server,
   Users,
   User,
   Sparkles,
@@ -50,6 +51,7 @@ function isActivitiesGroup(item: NavItem): item is NavItem & { children: typeof 
 }
 
 const settingsChildren = [
+  { href: "/personality", label: "Server", icon: Server },
   { href: "/settings/team", label: "Team", icon: Users },
   { href: "/settings/model", label: "Model", icon: Cpu },
 ] as const;
@@ -67,7 +69,7 @@ function NavLinks({
   const pathname = usePathname();
   const perms = usePermissions();
   const activitiesOpen = pathname.startsWith("/activities");
-  const settingsOpen = pathname.startsWith("/settings");
+  const settingsOpen = pathname.startsWith("/settings") || pathname === "/personality";
   const [activitiesExpanded, setActivitiesExpanded] = useState(activitiesOpen);
   const [settingsExpanded, setSettingsExpanded] = useState(settingsOpen);
 
@@ -206,7 +208,7 @@ function NavLinks({
         </>
       )}
 
-      {/* Admin-only: Organization section */}
+      {/* Admin-only: Settings section */}
       {perms.isAdmin && (
         <>
           {!collapsed && (
@@ -215,9 +217,9 @@ function NavLinks({
           {collapsed ? (
             <li>
               <Link
-                href="/settings/team"
+                href="/personality"
                 onClick={onNavigate}
-                title="Organization"
+                title="Settings"
                 className={cn(
                   "flex items-center rounded-md text-sm font-medium transition-colors",
                   "justify-center px-2 py-2",
@@ -226,7 +228,7 @@ function NavLinks({
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )}
               >
-                <Building2 className="size-4 shrink-0" aria-hidden />
+                <Settings className="size-4 shrink-0" aria-hidden />
               </Link>
             </li>
           ) : (
@@ -243,8 +245,8 @@ function NavLinks({
                 )}
                 aria-expanded={settingsExpanded}
               >
-                <Building2 className="size-4 shrink-0" aria-hidden />
-                <span className="flex-1 text-left">Organization</span>
+                <Settings className="size-4 shrink-0" aria-hidden />
+                <span className="flex-1 text-left">Settings</span>
                 {settingsExpanded ? (
                   <ChevronDown className="size-4 shrink-0" aria-hidden />
                 ) : (

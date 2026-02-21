@@ -119,6 +119,42 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* Toast notification icons: primary gradient as background (circle), icon glyph white */
+.parrott-toaster [data-sonner-toast].parrott-toast-success [data-icon],
+.parrott-toaster [data-sonner-toast][data-type="success"] [data-icon] {
+  background: linear-gradient(to right, #f97316, #ef4444) !important;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px;
+  min-height: 20px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.parrott-toaster [data-sonner-toast].parrott-toast-success [data-icon] svg,
+.parrott-toaster [data-sonner-toast][data-type="success"] [data-icon] svg {
+  color: white !important;
+  fill: currentColor;
+}
+.parrott-toaster [data-sonner-toast].parrott-toast-error [data-icon],
+.parrott-toaster [data-sonner-toast][data-type="error"] [data-icon] {
+  background: hsl(var(--destructive)) !important;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px;
+  min-height: 20px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.parrott-toaster [data-sonner-toast].parrott-toast-error [data-icon] svg,
+.parrott-toaster [data-sonner-toast][data-type="error"] [data-icon] svg {
+  color: white !important;
+  fill: currentColor;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

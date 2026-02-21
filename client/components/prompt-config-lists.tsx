@@ -13,6 +13,18 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { ExpandableText } from "@/components/expandable-text";
 import { createClient } from "@/lib/supabase/client";
+import { AlertTriangle } from "lucide-react";
+
+/** Tools that always use voice when the user is in a voice channel (with text fallback). Keep in sync with agent. */
+const VOICE_INHERENT_TOOLS = [
+  "join_voice_and_squawk",
+  "hang_out_in_voice",
+  "start_listening",
+  "stop_listening",
+];
+
+const VOICE_INHERENT_NOTE =
+  "This tool always uses voice when the user is in a voice channel, with text fallback. Text/Voice toggles still control the default for the written reply.";
 
 type PromptSection = {
   id: string;
@@ -200,6 +212,9 @@ export function ToolDescriptionsList({
               <Badge variant="outline" className="font-mono text-xs">
                 {t.tool_slug}
               </Badge>
+              {VOICE_INHERENT_TOOLS.includes(t.tool_slug) && (
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" aria-hidden />
+              )}
               <Badge variant={t.is_active ? "default" : "presence"} className="shrink-0 text-xs">
                 {t.is_active ? "Enabled" : "Disabled"}
               </Badge>
@@ -225,6 +240,9 @@ export function ToolDescriptionsList({
                 View
               </Button>
             </div>
+            {VOICE_INHERENT_TOOLS.includes(t.tool_slug) && (
+              <p className="text-xs text-muted-foreground">{VOICE_INHERENT_NOTE}</p>
+            )}
             {isAdmin && (
               <div className="flex w-full flex-col items-end gap-3">
                 <label className="flex items-start  gap-1.5 text-xs text-muted-foreground cursor-pointer">
@@ -264,6 +282,12 @@ export function ToolDescriptionsList({
             <>
               <SheetHeader>
                 <SheetTitle className="font-mono text-base">Tool: {selected.tool_slug}</SheetTitle>
+                {VOICE_INHERENT_TOOLS.includes(selected.tool_slug) && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 mt-1">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    {VOICE_INHERENT_NOTE}
+                  </p>
+                )}
                 <div className="flex flex-wrap items-center gap-2 mt-1">
                   <Badge variant={selected.is_active ? "default" : "presence"}>
                     {selected.is_active ? "Enabled" : "Disabled"}

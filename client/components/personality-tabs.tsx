@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { PersonalityToneList, type ParrotTone } from "@/components/personality-tone-list";
+import { usePathname } from "next/navigation";
+import { MediaPersonalitySection, PersonalityToneList, SystemTonesSection, type ParrotTone } from "@/components/personality-tone-list";
 import { PersonalityKeywordsChips } from "./personality-keywords-chips";
 import { ToolDescriptionsList } from "@/components/prompt-config-lists";
 import { VoiceStyleSlidersCard } from "@/components/voice-style-sliders-card";
 import { RoastConfigCard } from "@/components/roast-config-card";
+import { TtsEndingCard } from "@/components/tts-ending-card";
+import { RequestRestartModal } from "@/components/universal/modals/RequestRestartModal";
 import { usePermissions } from "@/lib/hooks/use-permissions";
-import { MessageSquare, Wrench, ChevronRight } from "lucide-react";
+import { MessageSquare, Wrench, ChevronRight, RotateCcw } from "lucide-react";
 
 type PromptSection = {
   id: string;
@@ -48,7 +51,12 @@ export function PersonalityTabs({
   toolsLoadError,
 }: PersonalityTabsProps) {
   const [activeTab, setActiveTab] = useState(TAB_TONES);
+  const [restartModalOpen, setRestartModalOpen] = useState(false);
+  const pathname = usePathname();
   const perms = usePermissions();
+  /** When on Server (Settings → Server = /personality), opening restart modal after save in Keywords, System Prompt Blocks, Ending, or Voice Style Sliders */
+  const isServerPage = pathname === "/personality";
+  const onSaveOpenRestartModal = () => setRestartModalOpen(true);
   const hasPromptContent =
     promptSections.length > 0 ||
     toolDescriptions.length > 0 ||
@@ -111,6 +119,8 @@ export function PersonalityTabs({
         </nav>
       </div>
 
+
+
       {/* Tab: Tones */}
       {activeTab === TAB_TONES && (
         <div className="flex flex-col gap-4">
@@ -133,9 +143,47 @@ export function PersonalityTabs({
                 migrations to seed defaults.
               </p>
             ) : (
-              <PersonalityToneList tones={tones} canEdit={perms.canEdit} />
+              <>
+                <SystemTonesSection
+                  tones={tones}
+                  canEdit={perms.canEdit}
+                  onDescriptionSaved={isServerPage ? onSaveOpenRestartModal : undefined}
+                />
+                {/* <MediaPersonalitySection tones={tones} canEdit={perms.canEdit} /> */}
+              </>
             )}
           </section>
+                          {/* Collapsible: Ending (TTS ending phrase + probability; Request restart) */}
+                <details className="group rounded-lg border border-border bg-card">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden />
+              Ending
+            </summary>
+            <div className="border-t border-border px-4 py-3">
+              <p className="mb-3 text-xs text-muted-foreground">
+                Text appended to the end of voice (TTS) responses. Leave empty to disable. Trigger probability controls how often it is applied (0–100%). Changes apply after the bot restarts or reloads config.
+              </p>
+              <TtsEndingCard
+                canEdit={perms.isAdmin}
+                compact
+                onSave={isServerPage ? onSaveOpenRestartModal : undefined}
+              />
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+                <span className="text-xs text-muted-foreground">
+                  Need a restart now?
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRestartModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  data-testid="request-restart-open"
+                >
+                  <RotateCcw className="size-4 shrink-0" aria-hidden />
+                  Request restart
+                </button>
+              </div>
+            </div>
+          </details>
 
           {/* Collapsible: Voice style sliders (global) */}
           <details className="group rounded-lg border border-border bg-card">
@@ -152,9 +200,17 @@ export function PersonalityTabs({
                 title="Global voice style"
                 description="Weights applied after the Voice block in the system prompt. Use for general tone."
                 canEdit={perms.canEdit}
+                onSave={isServerPage ? onSaveOpenRestartModal : undefined}
               />
             </div>
           </details>
+
+
+
+          <RequestRestartModal
+            open={restartModalOpen}
+            onOpenChange={setRestartModalOpen}
+          />
         </div>
       )}
 

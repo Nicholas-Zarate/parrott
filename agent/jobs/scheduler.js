@@ -5,12 +5,15 @@
 
 const cron = require('node-cron');
 const { generateAndSaveAnnouncement } = require('./announcement-job');
+const { runVoiceQuickCommentJob } = require('./voice-quick-comment-job');
 
 const LOG = '[Scheduler]';
 const DEFAULT_CRON = process.env.ANNOUNCEMENT_CRON || '0 */6 * * *';
 const RUN_ON_START = process.env.ANNOUNCEMENT_RUN_ON_START === '1';
+const VOICE_QUICK_COMMENT_INTERVAL_MS = Number(process.env.VOICE_QUICK_COMMENT_INTERVAL_MS) || 15000;
 
 let _started = false;
+let _voiceQuickCommentTimer = null;
 
 /**
  * Start all scheduled jobs.
@@ -49,6 +52,15 @@ function startScheduler() {
             console.error(`${LOG} Immediate run failed:`, err.message || err);
         });
     }
+
+    _voiceQuickCommentTimer = setInterval(async () => {
+        try {
+            await runVoiceQuickCommentJob();
+        } catch (err) {
+            console.error(`${LOG} Voice quick-comment job threw:`, err?.message || err);
+        }
+    }, VOICE_QUICK_COMMENT_INTERVAL_MS);
+    console.log(`${LOG} Voice quick-comment job scheduled every ${VOICE_QUICK_COMMENT_INTERVAL_MS / 1000}s`);
 }
 
 module.exports = { startScheduler };

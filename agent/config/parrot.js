@@ -222,6 +222,12 @@ module.exports = {
         if (fromDb != null && String(fromDb).trim()) return String(fromDb).trim();
         return null;
     },
+    /** Voice chat model from Supabase only; null when not set (pipeline then falls back to model). */
+    get voice_model() {
+        const fromDb = cachedRuntimeConfig?.voice_model;
+        if (fromDb != null && String(fromDb).trim()) return String(fromDb).trim();
+        return null;
+    },
     /** Max completion tokens from Supabase only; null when not set. */
     get max_completion_tokens() {
         const fromDb = cachedRuntimeConfig?.max_completion_tokens;
@@ -233,6 +239,21 @@ module.exports = {
         const fromDb = cachedRuntimeConfig?.max_prompt_tokens;
         if (fromDb != null && Number.isFinite(Number(fromDb)) && Number(fromDb) > 0) return Number(fromDb);
         return null;
+    },
+    /** TTS response ending (postfix) from Supabase. Default " SQUACK NINJAS" when key missing; empty string = do not append. */
+    get tts_ending() {
+        const ending = cachedRuntimeConfig?.tts_ending;
+         const probability = cachedRuntimeConfig?.tts_ending_probability;
+        if (ending){
+         if(probability){
+            //ex: probability = 50
+            //if random result x < 50, It's returned!
+            //if random result x >= 50, It's broken! 'oops, something broke when I got the';
+            return Math.random() * 100 < probability ? ending : 'oops, something broke on my probability check for my ending phrase. Why is the default squack ninjas anyways do? like huh';
+         }
+         return ending;
+        }
+        return '';
     },
     /** Current tones from Supabase only; null when not configured. */
     get tones() {

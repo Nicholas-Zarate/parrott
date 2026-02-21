@@ -24,9 +24,11 @@ type Props = {
   title: string;
   description: string;
   canEdit: boolean;
+  /** Called after a successful save. */
+  onSave?: () => void;
 };
 
-export function VoiceStyleSlidersCard({ scope, title, description, canEdit }: Props) {
+export function VoiceStyleSlidersCard({ scope, title, description, canEdit, onSave }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasRow, setHasRow] = useState(false);
@@ -91,6 +93,7 @@ export function VoiceStyleSlidersCard({ scope, title, description, canEdit }: Pr
     }
     setSavedValues(values);
     toast.success("Voice style saved. Changes apply after the agent restarts or next config refresh.");
+    onSave?.();
   };
 
   const handleDiscard = () => {

@@ -1,11 +1,25 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const LOGIN_PATH = "/login";
+const CONSOLE_COOKIE_NAME = "parrott_console_verified";
+
 /**
  * Refresh Supabase auth tokens on every request.
+ * Redirects to /login if not authenticated or console code not verified.
  * Next.js 16 renamed middleware.ts → proxy.ts.
  */
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  const isLoginPage = pathname === LOGIN_PATH;
+  const isAuthRoute = pathname.startsWith("/auth/");
+  const isApiRoute = pathname.startsWith("/api/");
+
+  if (isLoginPage || isAuthRoute || isApiRoute) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -32,7 +46,17 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const consoleVerified =
+    request.cookies.get(CONSOLE_COOKIE_NAME)?.value === "1";
+
+  if (!user || !consoleVerified) {
+    const loginUrl = new URL(LOGIN_PATH, request.url);
+    return NextResponse.redirect(loginUrl);
+  }
 
   return supabaseResponse;
 }
