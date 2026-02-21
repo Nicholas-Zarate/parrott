@@ -12,10 +12,10 @@ export default function AuthCodeErrorPage() {
           expired or been used already.
         </p>
         <Link
-          href="/"
+          href="/login"
           className="mt-4 inline-block text-sm font-medium text-primary underline underline-offset-4 hover:text-primary/80"
         >
-          Back to home
+          Back to login
         </Link>
       </div>
     </div>

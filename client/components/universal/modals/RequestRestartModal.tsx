@@ -66,10 +66,10 @@ export function RequestRestartModal({
           aria-describedby={descId}
         >
           {/* Primary gradient header */}
-          <div className="border-b border-transparent bg-gradient-to-r from-orange-500 to-red-500 px-4 py-3">
+          <div className="border-b border-transparent bg-gray-800 px-4 py-3">
             <Dialog.Title
               id={titleId}
-              className="text-lg font-semibold text-white"
+              className="text-lg font-semibold text-white text-center"
             >
               Request server restart
             </Dialog.Title>
@@ -102,7 +102,7 @@ export function RequestRestartModal({
               Send to #parrot channel
             </Button>
             <Dialog.Close asChild>
-              <Button type="button" variant="ghost" size="sm" className="mt-1">
+              <Button type="button" variant="secondary" size="sm" className="mt-1">
                 Cancel
               </Button>
             </Dialog.Close>
