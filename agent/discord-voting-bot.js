@@ -10,6 +10,7 @@ const voice = require('./commands/voice');
 const mention = require('./abilities/mention');
 const { isBotMentionedInContent } = require('./abilities/mention/format');
 const { startScheduler } = require('./jobs/scheduler');
+const { startRestartRequestConsumer } = require('./jobs/restart-request-consumer');
 const { handlePresenceUpdate, handleVoiceStateUpdate, init: initActivityListener } = require('./activity/listener');
 
 /** Discord permission integer for the bot invite URL (OAuth2). Override with INVITE_PERMISSIONS in .env if needed. Voice (squawk) needs Connect + Speak; re-invite with permissions that include those if the bot cannot join VC. */
@@ -71,6 +72,9 @@ client.on('ready', async () => {
 
     // Initialize activity listener (presenceUpdate triggers).
     initActivityListener();
+
+    // Poll restart_requests and send to Discord (voice or #parrot).
+    startRestartRequestConsumer(client);
     // Request guild members with presences so the gateway sends us presenceUpdate events (e.g. streaming).
     // Without this, Discord often does not send presence for members in larger/lazy-loaded guilds.
     for (const [guildId, guild] of client.guilds.cache) {

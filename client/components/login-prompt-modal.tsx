@@ -84,7 +84,7 @@ export function LoginPromptModal() {
           id="login-prompt-desc"
           className="mt-2 text-sm text-muted-foreground"
         >
-          Log in with Discord to access History, Logs, Activities, and Organization.
+          Log in with Discord to access History, Logs, Activities, and Settings.
         </p>
         <div className="mt-6 flex flex-wrap gap-2">
           <Button
