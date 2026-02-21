@@ -76,6 +76,8 @@ function formatRelative(dateStr: string): string {
 type Props = {
   tones: ParrotTone[];
   canEdit?: boolean;
+  /** Called after a successful description save (e.g. to open restart modal when on Server). */
+  onDescriptionSaved?: () => void;
 };
 
 function ToneRow({
@@ -173,7 +175,7 @@ function ToneRow({
   );
 }
 
-export function PersonalityToneList({ tones, canEdit = false }: Props) {
+export function MediaPersonalitySection({ tones, canEdit = false, onDescriptionSaved }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<ParrotTone | null>(null);
@@ -205,6 +207,8 @@ export function PersonalityToneList({ tones, canEdit = false }: Props) {
     }
   };
 
+
+  
   const handleSaveDescription = async () => {
     if (!selected) return;
     setSaving(true);
@@ -220,6 +224,247 @@ export function PersonalityToneList({ tones, canEdit = false }: Props) {
       prev ? { ...prev, description: value, updated_at: updated_at ?? prev.updated_at } : null
     );
     router.refresh();
+    onDescriptionSaved?.();
+  };
+
+  const handleToggleActive = async (tone: ParrotTone, is_active: boolean) => {
+    const { error } = await updateToneActive(tone.id, is_active);
+    if (error) {
+      const isForbiddenOrNotFound = error.includes("no effect");
+      const isNoSession = error.includes("No session");
+      const message = isNoSession
+        ? "Your sign-in wasn’t sent with this action. Sign in again with Discord and try again."
+        : isForbiddenOrNotFound
+          ? "You don't have permission to change this. Ask an admin for the Editor role in Settings → Team."
+          : "Failed to update: " + error;
+      toast.error(message);
+      return;
+    }
+    if (tone.slug === "text" && !is_active) {
+      toast.success("Text media disabled. The parrot won't reply to @mentions until Text is enabled again.");
+    } else {
+      toast.success(is_active ? "Media enabled." : "Media disabled.");
+    }
+    router.refresh();
+  };
+
+  return (
+    <>
+      <div className="space-y-8">
+        {responseTones.length > 0 && (
+          <section>
+            <div className="mb-2">
+              <h2 className="text-sm font-semibold text-foreground">
+                Response tones
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                How the parrot replies: text chat (word limits, style) and voice channel (TTS).
+              </p>
+              {!canEdit && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ask an admin for editor permissions to enable or disable text or voice tones.
+                </p>
+              )}
+            </div>
+            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+              {responseTones.map((tone) => (
+                <ToneRow
+                  key={tone.id}
+                  tone={tone}
+                  onView={openDrawer}
+                  canEdit={canEdit}
+                  onToggleActive={handleToggleActive}
+                />
+              ))}
+            </ul>
+          </section>
+        )}
+        {other.length > 0 && (
+          <section>
+            <div className="mb-2">
+              <h2 className="text-sm font-semibold text-foreground">
+                Other
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Tones that are not system prompt blocks or response tones.
+              </p>
+            </div>
+            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+              {other.map((tone) => (
+                <ToneRow key={tone.id} tone={tone} onView={openDrawer} />
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col sm:max-w-lg overflow-y-auto"
+        >
+          {selected && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex flex-wrap items-center gap-2">
+                  {selected.slug === "vc" ? (
+                    <span className="flex items-center gap-1.5">
+                      <Mic className="size-4" aria-hidden />
+                      Voice channel
+                    </span>
+                  ) : SYSTEM_PROMPT_SLUGS.has(selected.slug) ? (
+                    <span className="flex items-center gap-1.5">
+                      <FileText className="size-4" aria-hidden />
+                      {selected.slug === "role" ? "Role" : "Voice style"}
+                    </span>
+                  ) : (
+                    getToneTypeLabel(selected.slug)
+                  )}
+                  {SYSTEM_PROMPT_SLUGS.has(selected.slug) && (
+                    <Badge variant="outline" className="text-xs font-normal">
+                      System prompt block
+                    </Badge>
+                  )}
+                  {!selected.is_active && (
+                    <Badge variant="outline" className="text-xs">
+                      Inactive
+                    </Badge>
+                  )}
+                  {selected.max_words != null && (
+                    <Badge
+                      variant={SLUG_STYLE[selected.slug] ?? "outline"}
+                      className="text-xs"
+                    >
+                      max {selected.max_words} words
+                    </Badge>
+                  )}
+                </SheetTitle>
+                {!canEdit && selected.description?.trim() && (
+                  <p className="text-sm text-muted-foreground pt-1">
+                    {selected.description}
+                  </p>
+                )}
+              </SheetHeader>
+              <div className="flex flex-1 flex-col gap-6 px-4 pb-6">
+                <div>
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                    Description
+                  </h3>
+                  {canEdit ? (
+                    <>
+                      <textarea
+                        value={draftDescription}
+                        onChange={(e) => setDraftDescription(e.target.value)}
+                        placeholder="Short description of this tone (optional)"
+                        rows={3}
+                        className="border-input placeholder:text-muted-foreground w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                        aria-label="Tone description"
+                      />
+                      <Button
+                        size="sm"
+                        className="mt-2"
+                        onClick={handleSaveDescription}
+                        disabled={saving || (draftDescription.trim() || null) === (selected.description?.trim() || null)}
+                      >
+                        {saving ? "Saving…" : "Save description"}
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-sm leading-relaxed text-foreground">
+                      {selected.description?.trim() || "—"}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Task
+                  </h3>
+                  <ExpandableText className="mt-1 text-sm leading-relaxed text-foreground">
+                    {selected.task || "—"}
+                  </ExpandableText>
+                </div>
+                <div>
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Constraints
+                  </h3>
+                  <ExpandableText className="mt-1 text-sm leading-relaxed text-foreground">
+                    {selected.constraints || "—"}
+                  </ExpandableText>
+                </div>
+                {Array.isArray(selected.keywords) &&
+                  selected.keywords.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                        Keywords
+                      </h3>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selected.keywords.map((kw) => (
+                          <Badge
+                            key={kw}
+                            variant="outline"
+                            className="text-[10px] capitalize"
+                          >
+                            {kw.replace(/-/g, " ")}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                <p className="text-xs text-muted-foreground mt-auto">
+                  Updated {formatRelative(selected.updated_at)}
+                </p>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
+export function SystemTonesSection({ tones, canEdit = false, onDescriptionSaved }: Props) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<ParrotTone | null>(null);
+  const [draftDescription, setDraftDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+  const { systemPromptBlocks } = useMemo(() => partitionTones(tones), [tones]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const updated = tones.find((t) => t.id === selected.id);
+    if (updated) setSelected(updated);
+  }, [tones, selected]);
+
+  const openDrawer = (tone: ParrotTone) => {
+    setSelected(tone);
+    setDraftDescription(tone.description ?? "");
+    setOpen(true);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setSelected(null);
+      setDraftDescription("");
+    }
+  };
+
+  const handleSaveDescription = async () => {
+    if (!selected) return;
+    setSaving(true);
+    const value = draftDescription.trim() || null;
+    const { error, updated_at } = await updateToneDescription(selected.id, value);
+    setSaving(false);
+    if (error) {
+      toast.error("Failed to update description: " + error);
+      return;
+    }
+    toast.success("Description updated.");
+    setSelected((prev) =>
+      prev ? { ...prev, description: value, updated_at: updated_at ?? prev.updated_at } : null
+    );
+    router.refresh();
+    onDescriptionSaved?.();
   };
 
   const handleToggleActive = async (tone: ParrotTone, is_active: boolean) => {
@@ -259,55 +504,6 @@ export function PersonalityToneList({ tones, canEdit = false }: Props) {
             </div>
             <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
               {systemPromptBlocks.map((tone) => (
-                <ToneRow key={tone.id} tone={tone} onView={openDrawer} />
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* Response tones: how the parrot replies in chat vs in voice channel */}
-        {responseTones.length > 0 && (
-          <section>
-            <div className="mb-2">
-              <h2 className="text-sm font-semibold text-foreground">
-                Response tones
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                How the parrot replies: text chat (word limits, style) and voice channel (TTS).
-              </p>
-              {!canEdit && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Ask an admin for editor permissions to enable or disable text or voice tones.
-                </p>
-              )}
-            </div>
-            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
-              {responseTones.map((tone) => (
-                <ToneRow
-                  key={tone.id}
-                  tone={tone}
-                  onView={openDrawer}
-                  canEdit={canEdit}
-                  onToggleActive={handleToggleActive}
-                />
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* Any other slugs from the DB */}
-        {other.length > 0 && (
-          <section>
-            <div className="mb-2">
-              <h2 className="text-sm font-semibold text-foreground">
-                Other
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Tones that are not system prompt blocks or response tones.
-              </p>
-            </div>
-            <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
-              {other.map((tone) => (
                 <ToneRow key={tone.id} tone={tone} onView={openDrawer} />
               ))}
             </ul>
@@ -435,6 +631,16 @@ export function PersonalityToneList({ tones, canEdit = false }: Props) {
           )}
         </SheetContent>
       </Sheet>
+    </>
+  );
+}
+
+/** Composes system prompt blocks and media (response + other) sections for the Personality page. */
+export function PersonalityToneList(props: Props) {
+  return (
+    <>
+      <SystemTonesSection {...props} />
+      <MediaPersonalitySection {...props} />
     </>
   );
 }

@@ -26,9 +26,11 @@ type TtsEndingCardProps = {
   canEdit: boolean;
   /** Optional compact layout (e.g. inside a details section). */
   compact?: boolean;
+  /** Called after a successful save (ending or probability). */
+  onSave?: () => void;
 };
 
-export function TtsEndingCard({ canEdit, compact }: TtsEndingCardProps) {
+export function TtsEndingCard({ canEdit, compact, onSave }: TtsEndingCardProps) {
   const [state, setState] = useState<TtsEndingState>({ status: "loading" });
   const [saving, setSaving] = useState(false);
   const [ttsEndingInput, setTtsEndingInput] = useState("");
@@ -75,6 +77,7 @@ export function TtsEndingCard({ canEdit, compact }: TtsEndingCardProps) {
     }
     toast.success("TTS ending updated.");
     setState((s) => (s.status === "success" ? { ...s, ttsEnding: value } : s));
+    onSave?.();
   }
 
   async function handleTtsEndingProbabilitySave() {
@@ -89,6 +92,7 @@ export function TtsEndingCard({ canEdit, compact }: TtsEndingCardProps) {
     }
     toast.success("TTS ending probability updated.");
     setState((s) => (s.status === "success" ? { ...s, ttsEndingProbability: value } : s));
+    onSave?.();
   }
 
   if (state.status === "error") {
