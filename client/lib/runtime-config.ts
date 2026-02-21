@@ -13,6 +13,8 @@ export type RuntimeConfig = {
   voiceModel: string | null;
   maxCompletionTokens: number | null;
   maxPromptTokens: number | null;
+  ttsEnding: string | null;
+  ttsEndingProbability: number | null;
 };
 
 /**
@@ -31,6 +33,8 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
     voiceModel: null,
     maxCompletionTokens: null,
     maxPromptTokens: null,
+    ttsEnding: null,
+    ttsEndingProbability: null,
   };
 
   for (const row of data ?? []) {
@@ -44,6 +48,11 @@ export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
       config.maxCompletionTokens = Number(row.value_int);
     if (k === "max_prompt_tokens" && row.value_int != null)
       config.maxPromptTokens = Number(row.value_int);
+    if (k === "tts_ending") config.ttsEnding = row.value_text != null ? String(row.value_text) : null;
+    if (k === "tts_ending_probability" && row.value_int != null) {
+      const n = Number(row.value_int);
+      config.ttsEndingProbability = Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : null;
+    }
   }
 
   return config;
@@ -101,6 +110,47 @@ export async function updateRuntimeConfigVoiceModel(
       updated_at: new Date().toISOString(),
     })
     .eq("key", "voice_model");
+
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
+/**
+ * Update the TTS response ending (postfix) in parrot_runtime_config. Caller must be admin (RLS enforces).
+ * Empty string = do not append. Requires migration 055 to have run (row must exist).
+ */
+export async function updateRuntimeConfigTtsEnding(
+  value: string
+): Promise<{ error: string | null }> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from(TABLE)
+    .update({
+      value_text: value,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("key", "tts_ending");
+
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
+/**
+ * Update the TTS ending trigger probability (0-100) in parrot_runtime_config. Caller must be admin (RLS enforces).
+ * Requires migration 055 to have run (row must exist).
+ */
+export async function updateRuntimeConfigTtsEndingProbability(
+  percent: number
+): Promise<{ error: string | null }> {
+  const supabase = createClient();
+  const value = Math.max(0, Math.min(100, Math.round(percent)));
+  const { error } = await supabase
+    .from(TABLE)
+    .update({
+      value_int: value,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("key", "tts_ending_probability");
 
   if (error) return { error: error.message };
   return { error: null };
