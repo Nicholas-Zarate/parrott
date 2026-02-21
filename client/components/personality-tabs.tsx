@@ -6,6 +6,7 @@ import { PersonalityKeywordsChips } from "./personality-keywords-chips";
 import { ToolDescriptionsList } from "@/components/prompt-config-lists";
 import { VoiceStyleSlidersCard } from "@/components/voice-style-sliders-card";
 import { RoastConfigCard } from "@/components/roast-config-card";
+import { TtsEndingCard } from "@/components/tts-ending-card";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { MessageSquare, Wrench, ChevronRight } from "lucide-react";
 
@@ -153,6 +154,19 @@ export function PersonalityTabs({
                 description="Weights applied after the Voice block in the system prompt. Use for general tone."
                 canEdit={perms.canEdit}
               />
+            </div>
+          </details>
+
+          <details className="group rounded-lg border border-border bg-card">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden />
+              TTS response ending
+            </summary>
+            <div className="border-t border-border px-4 py-3">
+              <p className="mb-3 text-xs text-muted-foreground">
+                Text appended to the end of voice (TTS) responses. Leave empty to disable. Trigger probability controls how often it is applied (0–100%). Changes apply after the bot restarts or reloads config.
+              </p>
+              <TtsEndingCard canEdit={perms.isAdmin} compact />
             </div>
           </details>
         </div>

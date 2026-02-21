@@ -12,7 +12,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePermissions } from "@/lib/hooks/use-permissions";
-import { fetchRuntimeConfig, updateRuntimeConfigModel, updateRuntimeConfigVoiceModel } from "@/lib/runtime-config";
+import {
+  fetchRuntimeConfig,
+  updateRuntimeConfigModel,
+  updateRuntimeConfigVoiceModel,
+} from "@/lib/runtime-config";
 
 export const dynamic = "force-dynamic";
 
