@@ -17,9 +17,12 @@ Voice listen + respond uses:
 | Env | Purpose |
 |-----|--------|
 | **OPENAI_API_KEY** | Whisper STT (transcribe speech) |
+| STT_MODEL | Optional; default `whisper-1`. Set to `gpt-4o-mini-transcribe` for faster STT. |
+| STT_LANGUAGE | Optional; e.g. `en` to skip auto-detect and speed up transcription. |
 | **ELEVENLABS_API_KEY** | ElevenLabs TTS (bot speaks) |
 | ELEVENLABS_VOICE_ID | Optional; default voice if unset |
-| VOICE_STREAM_TIMEOUT_MS | Optional; default 8000 ms max wait for voice stream |
+| TTS_USE_FLASH_FOR_MAIN | Optional; set to 1/true/yes to use ElevenLabs Flash model for main pipeline (lower latency). |
+| VOICE_STREAM_TIMEOUT_MS | Optional; default 6000 ms max wait for voice stream (shorter = faster when Discord never sends stream end). |
 | **VOICE_MODEL** | Optional env override. If set, used for voice LLM instead of DB. If unset, voice model comes from Supabase `parrot_runtime_config.voice_model` (editable from Settings → Model in the FE). Falls back to main `model` when `voice_model` is not set. Seed default: `gpt-4o-mini` (migration 054). |
 
 ---

@@ -1,6 +1,6 @@
 /**
  * Look up a song's famous lyrics via Tavily search for the sing_song tool.
- * Returns a single lyric phrase, length-capped for TTS (ElevenLabs appends " SQUACK NINJAS").
+ * Returns a single lyric phrase, length-capped for TTS (a configurable response ending may be appended via runtime config).
  *
  * Env: TAVILY_API_KEY (required for search).
  */

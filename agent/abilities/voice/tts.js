@@ -21,6 +21,8 @@ const ELEVENLABS_BASE = 'https://api.elevenlabs.io/v1';
 const OUTPUT_FORMAT = 'mp3_44100_128';
 const MODEL_ID = 'eleven_multilingual_v2';
 const QUICK_COMMENT_MODEL_ID = process.env.TTS_QUICK_COMMENT_MODEL || 'eleven_flash_v2_5';
+/** When TTS_USE_FLASH_FOR_MAIN is set (1/true/yes), use Flash model for main pipeline too (lower latency, slight quality tradeoff). */
+const USE_FLASH_FOR_MAIN = /^(1|true|yes)$/i.test(String(process.env.TTS_USE_FLASH_FOR_MAIN || '').trim());
 
 /** Default voice settings: [stability, similarity_boost, style, speaker_boost] → 55, 95, 90, 85 (0–100 scale → 0–1). */
 const DEFAULT_STABILITY = 0.55;
@@ -28,9 +30,6 @@ const DEFAULT_SIMILARITY_BOOST = 0.95;
 const DEFAULT_STYLE = 0.9;
 const DEFAULT_SPEAKER_BOOST = true;
 const DEFAULT_SPEED = 0.85;
-
-/** Appended to every TTS phrase. */
-const TTS_ENDING = ' SQUACK NINJAS';
 
 function clamp01(value) {
     const n = Number(value);
@@ -74,7 +73,7 @@ function getDefaultVoiceSettings() {
 /**
  * Derive voice setting overrides from the text that will be spoken (pure, no I/O).
  * Disabled when TTS_DERIVE_SETTINGS_FROM_TEXT is '0', 'false', or 'no'. Otherwise uses length and punctuation.
- * @param {string} text - Phrase that will be spoken (before TTS_ENDING)
+ * @param {string} text - Phrase that will be spoken (optional configurable ending may be appended)
  * @returns {{ speed?: number, stability?: number }} Partial overrides; only keys that were set. Values clamped to valid ranges.
  */
 function deriveVoiceSettingsFromText(text) {
@@ -147,7 +146,11 @@ async function generateAudio(text, voiceSettingsOverrides = {}, opts = {}) {
     if (!trimmed) {
         return { success: false, error: 'TTS needs some text to speak.' };
     }
-    const textToSpeak = trimmed + TTS_ENDING;
+    const parrotConfig = require('../../config/parrot');
+    const ending = parrotConfig.tts_ending;
+    const probability = parrotConfig.tts_ending_probability;
+    const shouldAppend = typeof ending === 'string' && ending.length > 0 && Math.random() * 100 < probability;
+    const textToSpeak = shouldAppend ? trimmed + ending : trimmed;
 
     const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
     if (!apiKey) {
@@ -159,7 +162,7 @@ async function generateAudio(text, voiceSettingsOverrides = {}, opts = {}) {
     }
 
     const voiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || DEFAULT_VOICE_ID;
-    const modelId = useQuickCommentModel ? QUICK_COMMENT_MODEL_ID : MODEL_ID;
+    const modelId = useQuickCommentModel ? QUICK_COMMENT_MODEL_ID : (USE_FLASH_FOR_MAIN ? QUICK_COMMENT_MODEL_ID : MODEL_ID);
     const fromText = deriveVoiceSettingsFromText(trimmed);
     const voice_settings = mergeVoiceSettings({ ...fromText, ...voiceSettingsOverrides });
     const url = `${ELEVENLABS_BASE}/text-to-speech/${voiceId}?output_format=${OUTPUT_FORMAT}`;

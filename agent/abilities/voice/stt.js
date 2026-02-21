@@ -1,6 +1,7 @@
 /**
  * Speech-to-text via OpenAI Whisper API. Used by the voice session pipeline.
- * Env: OPENAI_API_KEY.
+ * Env: OPENAI_API_KEY (required). Optional: STT_MODEL (default whisper-1; use gpt-4o-mini-transcribe for faster),
+ * STT_LANGUAGE (e.g. "en" to skip auto-detect and speed up).
  *
  * Call transcribeFromFile(audioFilePath) after writing received audio to a file
  * (e.g. Opus stream piped through ffmpeg to WAV/MP3).
@@ -13,10 +14,13 @@ const os = require('os');
 const LOG_PREFIX = '[Voice STT]';
 
 const WHISPER_API = 'https://api.openai.com/v1/audio/transcriptions';
-const MODEL = 'whisper-1';
+
+/** Default STT model. Set STT_MODEL=gpt-4o-mini-transcribe for faster, slightly lower-cost transcription (same API). */
+const DEFAULT_STT_MODEL = 'whisper-1';
 
 /**
- * Transcribe an audio file using OpenAI Whisper.
+ * Transcribe an audio file using OpenAI Whisper (or gpt-4o-mini-transcribe when STT_MODEL is set).
+ * Optional: STT_LANGUAGE (e.g. "en") skips auto-detect and can speed up + improve accuracy.
  * @param {string} filePath - Absolute path to an audio file (e.g. .wav, .mp3). Whisper accepts mp3, mp4, mpeg, mpga, m4a, wav, webm.
  * @returns {Promise<{ success: boolean, text?: string, error?: string }>}
  */
@@ -35,13 +39,19 @@ async function transcribeFromFile(filePath) {
         return { success: false, error: 'Audio file is empty.' };
     }
 
+    const model = (process.env.STT_MODEL || DEFAULT_STT_MODEL).trim() || DEFAULT_STT_MODEL;
+    const language = process.env.STT_LANGUAGE?.trim();
+    const responseFormat = 'text';
+
     const ext = path.extname(filePath).toLowerCase();
     const mime = ext === '.mp3' ? 'audio/mpeg' : ext === '.wav' ? 'audio/wav' : ext === '.ogg' ? 'audio/ogg' : 'application/octet-stream';
     const buffer = fs.readFileSync(filePath);
     const blob = new Blob([buffer], { type: mime });
     const formData = new FormData();
     formData.append('file', blob, path.basename(filePath));
-    formData.append('model', MODEL);
+    formData.append('model', model);
+    formData.append('response_format', responseFormat);
+    if (language) formData.append('language', language);
 
     try {
         const response = await fetch(WHISPER_API, {
@@ -56,8 +66,7 @@ async function transcribeFromFile(filePath) {
             console.error(`${LOG_PREFIX} Whisper API error ${response.status}:`, errBody?.slice(0, 200));
             return { success: false, error: `Whisper API error: ${response.status}` };
         }
-        const data = await response.json();
-        const text = (data?.text ?? '').trim();
+        const text = (await response.text()).trim();
         return { success: true, text };
     } catch (err) {
         console.error(`${LOG_PREFIX} transcribe error:`, err?.message || err);

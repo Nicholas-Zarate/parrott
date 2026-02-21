@@ -22,8 +22,8 @@ const OPUS_SAMPLE_RATE = 48000;
 const OPUS_CHANNELS = 1;
 const MIN_PCM_BYTES = 8000; // ~50ms at 48kHz s16le mono; avoid empty/short files
 
-/** Max time to wait for voice stream to end (silence) before giving up. Shorter = faster reply when Discord never sends stream end. */
-const STREAM_COLLECT_TIMEOUT_MS = Number(process.env.VOICE_STREAM_TIMEOUT_MS) || 8000;
+/** Max time to wait for voice stream to end (silence) before giving up. Shorter = faster reply when Discord never sends stream end. Default 6s; set VOICE_STREAM_TIMEOUT_MS to override. */
+const STREAM_COLLECT_TIMEOUT_MS = Number(process.env.VOICE_STREAM_TIMEOUT_MS) || 6000;
 
 /** @type {Map<string, { stop: () => void }>} */
 const activePipelines = new Map();
