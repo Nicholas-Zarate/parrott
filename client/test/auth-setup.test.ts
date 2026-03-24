@@ -4,7 +4,7 @@
  * Or:  PLAYWRIGHT_RECORD_ADMIN=1 npx playwright test test/auth-setup.test.ts --project=default --headed  (Unix)
  * Or:  $env:PLAYWRIGHT_RECORD_ADMIN=1; npm run test:admin-auth  (PowerShell without cross-env)
  * When the browser opens, sign in as an admin (Discord OAuth). The test waits up to 2 minutes for
- * "Organization" in the nav, then goes to Personality → Tools and saves state to playwright/.auth/admin.json.
+ * "Settings" in the nav, then goes to Personality → Tools and saves state to playwright/.auth/admin.json.
  * Requires the DB to have at least one tool (so the Tools tab is visible).
  */
 
@@ -26,8 +26,8 @@ test.describe("Auth setup (record admin session)", () => {
 
     await page.goto("/");
 
-    // Wait for admin indicator: Organization in nav (only shown when isAdmin)
-    await expect(page.getByText("Organization")).toBeVisible({ timeout: 120_000 });
+    // Wait for admin indicator: Settings in nav (only shown when isAdmin)
+    await expect(page.getByText("Settings")).toBeVisible({ timeout: 120_000 });
 
     // Go to Personality → Tools and ensure we see admin UI (switches)
     await page.goto("/personality");

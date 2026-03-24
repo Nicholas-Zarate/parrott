@@ -2,11 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const LOGIN_PATH = "/login";
-const CONSOLE_COOKIE_NAME = "parrott_console_verified";
 
 /**
  * Refresh Supabase auth tokens on every request.
- * Redirects to /login if not authenticated or console code not verified.
+ * Redirects to /login if not authenticated (Discord/session).
  * Next.js 16 renamed middleware.ts → proxy.ts.
  */
 export async function proxy(request: NextRequest) {
@@ -50,10 +49,7 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const consoleVerified =
-    request.cookies.get(CONSOLE_COOKIE_NAME)?.value === "1";
-
-  if (!user || !consoleVerified) {
+  if (!user) {
     const loginUrl = new URL(LOGIN_PATH, request.url);
     return NextResponse.redirect(loginUrl);
   }

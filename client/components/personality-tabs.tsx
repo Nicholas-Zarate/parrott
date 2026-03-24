@@ -175,7 +175,7 @@ export function PersonalityTabs({
                 <button
                   type="button"
                   onClick={() => setRestartModalOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  className="inline-flex items-center gap-2 rounded-md bg-gradient-to-r from-orange-500 to-red-500 px-3 py-2 text-sm font-medium text-white transition-colors hover:from-orange-400 hover:to-red-400"
                   data-testid="request-restart-open"
                 >
                   <RotateCcw className="size-4 shrink-0" aria-hidden />

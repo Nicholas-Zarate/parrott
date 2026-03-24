@@ -15,6 +15,7 @@ const VOICE_CHANNEL_NAME = process.env.RESTART_REQUEST_VOICE_CHANNEL_NAME || nul
 const OVERSEER_ROLE_NAMES = ['overseer', ':overseer'];
 
 let _intervalId = null;
+let _pollRunCount = 0;
 
 /**
  * Find the overseer role in a guild (by name).
@@ -77,9 +78,13 @@ async function processOne(client) {
         console.error(`${LOG} Fetch error:`, fetchError.message);
         return false;
     }
-    if (!Array.isArray(rows) || rows.length === 0) return false;
+    const pendingCount = Array.isArray(rows) ? rows.length : 0;
+    if (pendingCount === 0) {
+        return false;
+    }
 
     const row = rows[0];
+    console.log(`${LOG} Processing pending request id=${row.id} target=${row.target} guild_id=${row.guild_id ?? 'null'}`);
     const guildId = row.guild_id?.trim() || process.env.RESTART_REQUEST_DEFAULT_GUILD_ID?.trim();
     let guild = guildId ? client.guilds.cache.get(guildId) : null;
     if (!guild && !guildId) {
@@ -90,6 +95,7 @@ async function processOne(client) {
         await supabase.from(TABLE).update({ status: 'failed' }).eq('id', row.id);
         return true;
     }
+    console.log(`${LOG} Using guild: ${guild.name} (${guild.id})`);
 
     const role = findOverseerRole(guild);
     const roleMention = role ? `<@&${role.id}>` : '';
@@ -103,6 +109,7 @@ async function processOne(client) {
                 return true;
             }
             const content = roleMention ? `${roleMention} ${row.message}` : row.message;
+            console.log(`${LOG} Sending to #${channel.name} (${channel.id}) in ${guild.name}…`);
             await channel.send({ content: content.slice(0, 2000) || '—' });
             console.log(`${LOG} Sent to #${channel.name} in ${guild.name}.`);
         } else if (row.target === 'voice') {
@@ -112,6 +119,7 @@ async function processOne(client) {
                 await supabase.from(TABLE).update({ status: 'failed' }).eq('id', row.id);
                 return true;
             }
+            console.log(`${LOG} Sending TTS to voice channel ${voiceChannel.name} (${voiceChannel.id}) in ${guild.name}…`);
             const result = await playInVoiceChannel(client, voiceChannel, {
                 type: 'tts',
                 text: row.message || "Someone's gotta restart the server.",
@@ -122,12 +130,26 @@ async function processOne(client) {
                 return true;
             }
             console.log(`${LOG} TTS sent in ${voiceChannel.name} (${guild.name}).`);
+            // Also post to #parrot so there's a text record.
+            const textChannel = findTextChannelByName(guild, PARROT_CHANNEL_NAME);
+            if (textChannel) {
+                const content = roleMention ? `${roleMention} ${row.message}` : row.message;
+                await textChannel.send({ content: (content || row.message || '—').slice(0, 2000) });
+                console.log(`${LOG} Also sent to #${textChannel.name} (voice job).`);
+            } else {
+                console.log(`${LOG} No #${PARROT_CHANNEL_NAME} for text copy; voice-only.`);
+            }
         } else {
             await supabase.from(TABLE).update({ status: 'failed' }).eq('id', row.id);
             return true;
         }
 
-        await supabase.from(TABLE).update({ status: 'sent' }).eq('id', row.id);
+        const { error: updateErr } = await supabase.from(TABLE).update({ status: 'sent' }).eq('id', row.id);
+        if (updateErr) {
+            console.error(`${LOG} Failed to mark id=${row.id} as sent:`, updateErr.message);
+        } else {
+            console.log(`${LOG} Marked request id=${row.id} as sent.`);
+        }
     } catch (err) {
         console.error(`${LOG} Send error:`, err?.message || err);
         await supabase.from(TABLE).update({ status: 'failed' }).eq('id', row.id).catch(() => {});
@@ -148,15 +170,23 @@ function startRestartRequestConsumer(client) {
         return;
     }
 
+    const usingServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+    console.log(
+        `${LOG} Consumer started (poll every ${POLL_INTERVAL_MS / 1000}s). ` +
+        `DB access: ${usingServiceRole ? 'SUPABASE_SERVICE_ROLE_KEY (can read/update restart_requests)' : 'SUPABASE_ANON_KEY only — RLS will block reads; set SUPABASE_SERVICE_ROLE_KEY for restart requests.'}`
+    );
+
     _intervalId = setInterval(async () => {
+        _pollRunCount++;
         try {
-            await processOne(client);
+            const hadWork = await processOne(client);
+            if (!hadWork && _pollRunCount % 20 === 1) {
+                console.log(`${LOG} Poll #${_pollRunCount}: no pending restart requests.`);
+            }
         } catch (err) {
             console.error(`${LOG} Poll error:`, err?.message || err);
         }
     }, POLL_INTERVAL_MS);
-
-    console.log(`${LOG} Consumer started (poll every ${POLL_INTERVAL_MS / 1000}s).`);
 }
 
 module.exports = {

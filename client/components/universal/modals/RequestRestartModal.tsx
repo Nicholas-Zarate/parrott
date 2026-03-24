@@ -29,20 +29,26 @@ export function RequestRestartModal({
   const descId = useId();
 
   async function handleSend(target: "voice" | "parrot") {
+    const payload = { target, guildId: guildId ?? undefined };
+    console.log("[RequestRestartModal] Sending request", payload);
+
     setBusy(true);
     try {
       const res = await fetch(API_REQUEST_RESTART, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          target,
-          guildId: guildId ?? undefined,
-        }),
+        body: JSON.stringify(payload),
       });
+
+      console.log("[RequestRestartModal] Response", res.status, res.statusText);
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        console.error("[RequestRestartModal] Error response body", data);
         throw new Error(data?.error ?? `Request failed (${res.status})`);
       }
+
+      console.log("[RequestRestartModal] Success — request queued; agent will send to Discord when it polls.");
       toast.success(
         target === "voice"
           ? "Restart request sent to voice chat."
@@ -50,6 +56,7 @@ export function RequestRestartModal({
       );
       onOpenChange(false);
     } catch (err) {
+      console.error("[RequestRestartModal] Failed to send", err);
       toast.error(err instanceof Error ? err.message : "Failed to send request.");
     } finally {
       setBusy(false);

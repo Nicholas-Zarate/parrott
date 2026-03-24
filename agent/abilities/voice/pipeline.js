@@ -8,7 +8,6 @@ const path = require('path');
 const os = require('os');
 const { getToolsCalledFromSteps } = require('../../database/supabase/conversation-history');
 const { insertVoiceSessionTurn } = require('../../database/supabase/voice-sessions');
-const { chatWithTools } = require('../../ai-sdk/with-tools');
 const parrotConfig = require('../../config/parrot');
 const { playInSession } = require('./play');
 const { transcribeFromFile } = require('./stt');
@@ -215,6 +214,7 @@ function startPipeline(session, client) {
             const context = { message: fakeMessage, client, voiceSession: session };
 
             const voiceModel = process.env.VOICE_MODEL?.trim() || parrotConfig.voice_model || parrotConfig.model;
+            const { chatWithTools } = require('../../ai-sdk/with-tools');
             const { text, steps } = await chatWithTools(messages, context, {
                 model: voiceModel,
                 maxTokens: Math.max(parrotConfig.max_completion_tokens ?? 256, 400),

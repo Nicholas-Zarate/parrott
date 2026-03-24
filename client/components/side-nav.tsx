@@ -51,7 +51,7 @@ function isActivitiesGroup(item: NavItem): item is NavItem & { children: typeof 
 }
 
 const settingsChildren = [
-  { href: "/personality", label: "Server", icon: Server },
+  { href: "/settings/server", label: "Server", icon: Server },
   { href: "/settings/team", label: "Team", icon: Users },
   { href: "/settings/model", label: "Model", icon: Cpu },
 ] as const;
@@ -217,7 +217,7 @@ function NavLinks({
           {collapsed ? (
             <li>
               <Link
-                href="/personality"
+                href="/settings/server"
                 onClick={onNavigate}
                 title="Settings"
                 className={cn(

@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Loader2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 function DiscordIcon({ className }: { className?: string }) {
   return (
@@ -21,10 +19,6 @@ function DiscordIcon({ className }: { className?: string }) {
 }
 
 export default function LoginPage() {
-  const [code, setCode] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [codeError, setCodeError] = useState("");
-  const [codeBusy, setCodeBusy] = useState(false);
   const [discordBusy, setDiscordBusy] = useState(false);
 
   async function handleDiscordLogin() {
@@ -43,38 +37,9 @@ export default function LoginPage() {
     window.location.href = data.url;
   }
 
-  async function handleCodeSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setCodeError("");
-    setCodeBusy(true);
-    try {
-      const res = await fetch("/api/console-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          code,
-          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
-        }),
-      });
-      if (res.ok) {
-        window.location.href = "/";
-        return;
-      }
-      const data = await res.json().catch(() => ({}));
-      setCodeError(
-        res.status === 503
-          ? (data.error ?? "Console code not configured")
-          : (data.error ?? "Invalid code")
-      );
-    } finally {
-      setCodeBusy(false);
-    }
-  }
-
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-6">
-      <div className="flex flex-col items-center gap-6 rounded-lg p-18 py-14 lg:p-24 lg:py-18 border border-2 bg-card">
-        <div className="flex flex-col items-center pb-8 lg:pb-12">
+      <div className="flex flex-col items-center gap-6 rounded-lg border-2 border-border bg-card p-14 lg:p-24">
         <Image
           src="/assets/toucan_white.png"
           alt="Parrott"
@@ -83,61 +48,7 @@ export default function LoginPage() {
           className="shrink-0"
           priority
         />
-        <h1 className="font-bold text-black text-3xl font-sans-serif">p a r r o t t</h1>
-        {/* <p className="text-muted-foreground text-sm text-center">  What it is, yo</p> */}
-        </div>
-        {/* <form
-          onSubmit={handleCodeSubmit}
-          className="flex w-full max-w-xs flex-col gap-2 bg-gray-800 p-4 py-6 rounded-lg"
-        >
-          <div className="relative">
-            <Input
-              id="console-code"
-              type={showPassword ? "text" : "password"}
-              placeholder="speak"
-              value={code}
-              onChange={(e) => {
-                setCode(e.target.value);
-                setCodeError("");
-              }}
-              autoComplete="off"
-              disabled={codeBusy}
-              aria-invalid={!!codeError}
-              aria-describedby={codeError ? "code-error" : undefined}
-              className="bg-white text-black pr-9"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="absolute right-0 top-0 h-9 w-9 text-muted-foreground hover:text-foreground"
-              onClick={() => setShowPassword((p) => !p)}
-              tabIndex={-1}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? (
-                <EyeOff className="size-4" aria-hidden />
-              ) : (
-                <Eye className="size-4" aria-hidden />
-              )}
-            </Button>
-          </div>
-          {codeError && (
-            <p id="code-error" className="text-sm text-destructive">
-              {codeError}
-            </p>
-          )}
-          <Button
-            type="submit"
-            disabled={codeBusy}
-            aria-busy={codeBusy}
-            className="w-full gap-2 bg-gradient-to-r from-orange-500 to-red-500 text-white hover:from-orange-400 hover:to-red-400 disabled:opacity-70"
-          >
-            {codeBusy && <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />}
-            {codeBusy ? "Checking…" : "Submit"}
-          </Button>
-        </form> */}
-
+        <h1 className="font-bold text-3xl text-foreground font-sans-serif">p a r r o t t</h1>
         <Button
           type="button"
           onClick={handleDiscordLogin}

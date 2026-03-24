@@ -175,27 +175,40 @@ async function onMention(message, client) {
         const memberForVoice = message.guild ? (message.member ?? await message.guild.members.fetch(message.author?.id).catch(() => null)) : null;
         const voiceChannel = memberForVoice?.voice?.channel;
         const anyVoiceInherentTool = toolsCalled.length > 0 && toolsCalled.some((name) => VOICE_INHERENT_TOOLS.includes(name));
-        const doVoice = wantsVoiceFromUser || anyToolWantsVoice || (anyVoiceInherentTool && !!voiceChannel);
+        const onlySquawk = toolsCalled.length === 1 && toolsCalled[0] === 'join_voice_and_squawk';
+        const doVoice = !onlySquawk && (wantsVoiceFromUser || anyToolWantsVoice || (anyVoiceInherentTool && !!voiceChannel));
 
         const anyToolTextOnly = toolsCalled.length > 0 && toolsCalled.every((name) => {
             const meta = toolMetadata[name];
             return meta && meta.response_delivery === 'voice';
         });
-        const doText = !anyToolTextOnly;
+        const doText = !anyToolTextOnly && !onlySquawk;
 
         if (doText) {
             await replyMsg.edit(finalContent);
-        } else {
-            await replyMsg.edit('—').catch(() => {});
         }
+        // } else {
+        //     await replyMsg.edit('—').catch(() => {});
+        // }
 
         if (doVoice && message.guild && voiceChannel) {
+
+        if (finalContent) {
             const textToSpeak = finalContent.length > VOICE_REPLY_MAX_LEN
                 ? finalContent.slice(0, VOICE_REPLY_MAX_LEN).trim() + '…'
                 : finalContent;
             playInVoiceChannel(client, voiceChannel, { type: 'tts', text: textToSpeak }).catch((err) => {
                 console.error('[Mention Error] Voice delivery failed:', err?.message || err);
             });
+            playInTextChannel(client, "testing", { type: 'tts', text: textToSpeak }).then(() => {
+                console.log('[Mention][SUCCESS] Text delivery successful', );
+            }).catch((err) => {
+                console.error('[Mention][ERROR] Text delivery failed:', err?.message || err);
+            });
+        } else {
+            playInTextChannel(client, "testing", { type: 'tts', text: textToSpeak }).then(() => {
+                console.log('[Mention][ERROR] no final content from LLM', );
+            })
         }
 
         await saveConversation({
@@ -207,6 +220,7 @@ async function onMention(message, client) {
             response_text: finalContent,
             tools_called: toolsCalled,
         });
+    }
     } catch (err) {
         console.error('[Mention Error] OpenAI/tools error:', err.message || err, err.detail || '');
         const userMsg = getOpenAIErrorMessage(err);
