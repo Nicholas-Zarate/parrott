@@ -12,6 +12,7 @@ Work top-to-bottom. Each task has an acceptance check — don't advance until it
 | [`docs/gap-analysis.md`](docs/gap-analysis.md) | **Second-pass review** — parity gaps (allowlist, rate limit, delivery routing, dashboard-compat writes) folded into tasks |
 | [`docs/features.md`](docs/features.md) | **Feature catalog + flags** — taxonomy, `parrot_feature_flags` schema, status lifecycle |
 | [`docs/frontend-plan.md`](docs/frontend-plan.md) | **Dashboard (FE) plan** — `client/` deltas, each gated on a brain task |
+| [`docs/voice-plan.md`](docs/voice-plan.md) | **Voice (Task 5) design** — streaming cascade, VAD/barge-in, wake-word window, vendor choices |
 | [`docs/status.md`](docs/status.md) | Living status tables, decisions log, open questions |
 | [`docs/memory-plan.md`](docs/memory-plan.md) | Memory design: two stores, config, multi-user scope, Supabase issues |
 | [`tools/remember/remember.md`](tools/remember/remember.md) | What's worth remembering → feeds agent instructions + WM template |
@@ -83,17 +84,26 @@ Scaffold the real app per [`CLAUDE.md`](CLAUDE.md) § Folder structure: NestJS a
 
 ## Task 2 — Parrott agent (text only) ⬜
 
-Define `core/agents/parrott.ts`, **instantiated inside a NestJS provider** (singleton — avoids the Mastra-in-DI beta rough edges). Dynamic `instructions` + `model` from `parrot_*` tables via `runtimeContext`, 30–60s cache. Memory config from Task 0. Working-memory template seeded from [`remember.md`](tools/remember/remember.md). Define core ports in `core/ports/` (`IncomingMessage`, `Replier`, `VoiceSink`).
+> **DB migrations done ✅ (2026-06-10)** — All 9 v2 migrations applied to Supabase (`cuysugewduqfygsbauec`).
+> Tables live: `parrott_admin_discord_ids`, `parrott_app_roles`, `logs`, `activity_listeners`,
+> `parrot_conversation_history`, `parrot_announcements`, `activity_trigger_settings`,
+> `parrot_tones`, `parrot_prompt_sections`, `parrot_runtime_config`, `parrot_voice_dimensions`,
+> `parrot_roast_config`, `tools_meta_data`, `voice_sessions`, `voice_session_turns`,
+> `user_dm_preferences`, `parrot_feature_flags`, `parrot_channel_allowlist`.
+> Model IDs seeded as full Model Router format (`openai/gpt-4o`) — **no mapping layer needed.**
+> Migration files in `agentv2/db/migrations/`.
+
+Remaining work (code): Define `core/agents/parrott.ts`, **instantiated inside a NestJS provider** (singleton — avoids the Mastra-in-DI beta rough edges). Dynamic `instructions` + `model` from `parrot_*` tables via `runtimeContext`, 30–60s cache. Memory config from Task 0. Working-memory template seeded from [`remember.md`](tools/remember/remember.md). Define core ports in `core/ports/` (`IncomingMessage`, `Replier`, `VoiceSink`).
 
 **Personality layer (`infra/personality.service.ts` — a Nest provider):**
 - Read the existing `parrot_*` tables (reuse v1's query shape — see `agent/database/supabase/parrot-tones.js`, `prompt-sections.js`). Granular dashboard edits already write these; do NOT introduce a new personality table.
 - **`formatPersonalityMarkdown(fields)`** (in `core/personality/`) — emits **structured markdown** (`## Role`, `## Voice`, `## Task`, `## Constraints`, `## Tools`), replacing v1's flat space-join (`buildSystemPrompt` in `agent/config/parrot.js:203`). Clear section boundaries + composes with Mastra's markdown memory blocks.
   - ⚠️ **Behavior-change risk:** this changes the exact prompt the model sees vs v1 — in a "parity" migration the bot's voice may shift subtly. **Eyeball it:** generate replies for a few representative prompts with old (space-join) vs new (markdown) formatting and confirm the personality still feels right before locking it in.
-- `model` resolved from `parrot_runtime_config`. ⚠️ **Format mismatch:** v1 stores bare ids (`gpt-4o-mini`); Model Router needs a provider prefix (`openai/gpt-4o-mini`). Add a small mapping layer (prefix bare ids by known provider) **or** a one-time data migration of the column. Decide which; mapping layer is safer (no destructive migration).
+- `model` resolved from `parrot_runtime_config`. ✅ IDs already in Model Router format (`openai/gpt-4o`), no mapping layer needed.
 - 30–60s TTL cache so per-turn `runtimeContext` resolution doesn't hit Supabase every message.
 
 **Feature-flag foundation (see [`docs/features.md`](docs/features.md)):**
-- Create the `parrot_feature_flags` migration (key, label, category, enabled, status, description) and seed one row per catalogued feature (most `status='planned'`).
+- ✅ `parrot_feature_flags` table created + 10 feature rows seeded (all `status='planned'`).
 - Build `FeatureFlagService` (Nest provider, cached like personality) exposing `isLive(key)` = `enabled && status==='live'`. Every feature task gates on it.
 
 **Acceptance:** Get a personality-shaped reply assembled as markdown from the live `parrot_*` tables; editing a tone/section in the DB changes the prompt within the cache window; a fact persists to working memory and is recalled on a second turn; `FeatureFlagService.isLive('capability.memory')` gates the memory path.
@@ -125,11 +135,17 @@ Port to TS `createTool` in `core/tools/`: `sing_song`, `search_web`, `create_tim
 
 ## Task 5 — Voice adapter ⬜
 
-`platforms/discord/voice/` (uses `@discordjs/voice` with the Necord-managed client) + `infra/stt.service.ts` (Whisper) + `infra/tts.service.ts` (ElevenLabs). Adapter implements the core `VoiceSink` port. Reuse v1's Opus→PCM→ffmpeg pipeline learnings (see `../docs/voice-pipeline-findings-and-changes.md`). STT → agent → TTS. `join_voice` Discord-only tool.
+> **Full design: [`docs/voice-plan.md`](docs/voice-plan.md).** Build a **streaming cascade**, not a port of v1's batch pipeline (v1 is 3–18s to first audio and can't be interrupted). Summary below; details, vendor rationale, and phased build live in the voice plan.
 
-**Voice parity to port (G12 — see `docs/gap-analysis.md`):** one session/guild + state; `voice_sessions`/`voice_session_turns` persistence; **auto-end on disconnect**; keyword trigger "parrot(t)" + expect-next-utterance; **single in-flight turn guard**; separate `voice_model`; voice↔Mastra memory mapping decision. Quick-comment job → Task 6.
+`platforms/discord/voice/` (streaming orchestrator + Discord receiver→PCM ingest + Opus encode→player, on the Necord-managed client) + `infra/` STT/TTS/VAD/wake-word adapters. Implements `VoiceSink` + new ports `SttPort`/`TtsPort`/`VadPort`/`WakeWordPort`. `join_voice` Discord-only tool.
 
-**Acceptance:** "hey parrott …" in VC → spoken reply; session lifecycle + keyword trigger + single-turn guard work; same agent/memory as text; session row persisted.
+**Pipeline:** continuous Opus→16k PCM → **Silero VAD** → **Porcupine** wake-word gate → **Deepgram** streaming STT (endpointing) → **`agent.stream()`** (tools + memory + personality) → **sentence chunker** → **ElevenLabs Flash ws** TTS → Opus → player. **Wake-word-then-open ~30s window** (open-mic inside, engaged-speaker lock). **Barge-in:** VAD during SPEAKING → `player.stop()` + abort stream + flush TTS < 200ms. Replaces v1's `processingTurn` boolean with a `IDLE→LISTENING→THINKING→SPEAKING` state machine. Reuse v1's Opus→PCM **decode** learnings (`../docs/voice-pipeline-findings-and-changes.md`); **drop** the per-turn disk+ffmpeg+batch-Whisper path.
+
+**Locked decisions (see voice-plan.md § Locked decisions — do not re-litigate):** STT = **Deepgram Nova-3**; wake word = **Porcupine local** (STT only runs once the window is open); voice memory = **shared Mastra thread** (same `thread`/`resource` as text — resolves G12) **+** `voice_sessions`/`voice_session_turns` rows; barge-in = **engaged speaker only**.
+
+**Voice parity to port:** `voice_sessions`/`voice_session_turns` persistence; **auto-end on disconnect**; separate `voice_model`. Quick-comment job → Task 6. New env: `DEEPGRAM_API_KEY`, `PICOVOICE_ACCESS_KEY`.
+
+**Acceptance (see voice-plan.md for full gate):** "parrot …" opens a window → spoken reply with **first-audio < 1.5s** (instrumented); **barge-in stops playback < 200ms** and picks up the new utterance; a tool runs **inside** the loop during a voice turn; same agent/memory/personality as text; session row persisted; `TtsPort` swap test passes.
 
 ---
 

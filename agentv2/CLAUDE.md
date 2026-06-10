@@ -135,6 +135,8 @@ All design work done. Zero runtime code written. See `agentv2/docs/status.md` fo
 | `OPENAI_API_KEY` | Model Router provider key; also embeddings (`text-embedding-3-small`) + Whisper STT |
 | `ELEVENLABS_API_KEY` | TTS |
 | `ELEVENLABS_VOICE_ID` | Optional — default voice if unset |
+| `DEEPGRAM_API_KEY` | Streaming STT (Deepgram Nova-3) — **Task 5 (voice)**. See [`docs/voice-plan.md`](docs/voice-plan.md). |
+| `PICOVOICE_ACCESS_KEY` | Local wake-word (Porcupine "parrot") — **Task 5 (voice)**. Free tier. |
 
 Note: `DATABASE_URL` (raw Postgres connection for `@mastra/pg`) and `SUPABASE_URL` (REST URL for supabase-js) are two different things — both are needed.
 
