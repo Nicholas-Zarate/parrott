@@ -11,6 +11,7 @@ Work top-to-bottom. Each task has an acceptance check — don't advance until it
 | [`docs/architecture.md`](docs/architecture.md) | Ports & adapters, boundary rule, connection map, **ESM/CJS gotcha + fix** |
 | [`docs/gap-analysis.md`](docs/gap-analysis.md) | **Second-pass review** — parity gaps (allowlist, rate limit, delivery routing, dashboard-compat writes) folded into tasks |
 | [`docs/features.md`](docs/features.md) | **Feature catalog + flags** — taxonomy, `parrot_feature_flags` schema, status lifecycle |
+| [`docs/frontend-plan.md`](docs/frontend-plan.md) | **Dashboard (FE) plan** — `client/` deltas, each gated on a brain task |
 | [`docs/status.md`](docs/status.md) | Living status tables, decisions log, open questions |
 | [`docs/memory-plan.md`](docs/memory-plan.md) | Memory design: two stores, config, multi-user scope, Supabase issues |
 | [`tools/remember/remember.md`](tools/remember/remember.md) | What's worth remembering → feeds agent instructions + WM template |
@@ -45,7 +46,7 @@ Work top-to-bottom. Each task has an acceptance check — don't advance until it
 >
 > **Feature-flag rule (all feature tasks 3–6):** each feature is built behind its `parrot_feature_flags` row. On task start, set its `status='wip'`; on acceptance, flip to `status='live'`. Nothing ships active until its flag is `live`. See [`docs/features.md`](docs/features.md).
 
-## Task 0 — Supabase + Mastra memory spike ⬜ (DO FIRST)
+## Task 0 — Supabase + Mastra memory spike ✅ (DO FIRST)
 
 **Why first:** The one load-bearing unknown. Mastra's `PgVector` has documented friction with Supabase (`embeddings`/`vector_id` table, SSL). Prove this path before building anything on it. See [`docs/memory-plan.md`](docs/memory-plan.md) § "Supabase + PgVector known issues".
 
@@ -56,9 +57,9 @@ Work top-to-bottom. Each task has an acceptance check — don't advance until it
 4. Write one message to a thread (`resource`/`thread` set), then read it back. Trigger a semantic-recall query.
 
 **Acceptance:** (validate **all** Mastra tables, not just vector — see gap-analysis G8)
-- [ ] Thread auto-creates; a message round-trips; working memory persists across two calls; semantic recall returns — all against Supabase, no errors
-- [ ] Every actual table name + schema Mastra creates is recorded into `docs/memory-plan.md`
-- [ ] Exact working import names (`PgStore` vs `PostgresStore`) + connection string format recorded back into `docs/memory-plan.md`
+- [x] Thread auto-creates; a message round-trips; working memory persists across two calls; semantic recall returns — all against Supabase, no errors
+- [x] Every actual table name + schema Mastra creates is recorded into `docs/memory-plan.md`
+- [x] Exact working import names (`PgStore` vs `PostgresStore`) + connection string format recorded back into `docs/memory-plan.md`
 
 **On failure:** capture the exact error in `docs/memory-plan.md`; evaluate fallback (separate managed Postgres — Neon/Railway) before proceeding.
 
@@ -152,11 +153,16 @@ Guarded NestJS controller in `src/control/`: `reload` (bust **all cached config*
 
 ---
 
-## Task 8 — Dashboard Features page (client) ⬜
+## Task 8 — Dashboard (FE) work ⬜
 
-Next.js page `client/app/features/`: reads/writes `parrot_feature_flags` via Supabase (like other config). Grouped by category (Surface/Tool/Autonomous/Capability) with an `enabled` switch + `status` badge per row; expand Tools / Activity to drill into existing granular flags (`tools_meta_data.enabled`, `activity_trigger_settings.enabled`). Lower priority than the bot — can land after parity. See [`docs/features.md`](docs/features.md).
+The full FE workstream is its own doc: **[`docs/frontend-plan.md`](docs/frontend-plan.md)**. Summary — three deltas, each gated on its brain task:
+- **Features page** (`client/app/features/`) — edit `parrot_feature_flags`, status badges, drill into granular flags. *(after Task 2)*
+- **Allowlist/tiers editor** — edit the new allowlist `parrot_*` table (G2). *(after Task 3)*
+- **`request-restart` repoint** — call the control endpoint instead of DB-poll. *(after Task 7)*
 
-**Acceptance:** Admin can toggle a feature's `enabled` + see its `status`; the bot honors `isLive(key)` within the cache window; granular tool/trigger drill-downs work.
+Most of the dashboard is **unchanged** (history, logs, personality, scenarios, DM prefs — see the no-change list in the FE plan). Lower priority than the bot; FE tasks land after their brain dependency.
+
+**Acceptance:** Features page toggles + status badges work and the bot honors `isLive(key)`; allowlist editable from the dashboard; `request-restart` hits the control endpoint.
 
 ---
 
@@ -169,6 +175,10 @@ Reach parity with v1, then swap the running bot to v2. Dashboard + tables unchan
 **Acceptance:** v2 handles all live abilities in production; v1 remains revertible until the soak window passes.
 
 ---
+
+## Frontend / dashboard
+
+All `client/` (Next.js) changes live in **[`docs/frontend-plan.md`](docs/frontend-plan.md)** (consolidated in Task 8 above). **Rule: build brain-first.** Each FE task is gated on the brain task that creates the table/endpoint it edits — never build an FE task before its dependency. Most of the dashboard is reused unchanged.
 
 ## How to update this file
 

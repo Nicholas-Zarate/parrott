@@ -37,23 +37,109 @@ Retrieves older messages and context that are semantically relevant to what the 
 
 ---
 
+## Task 0 spike results (verified 2026-06-10)
+
+All four checks passed against Supabase (project `cuysugewduqfygsbauec`, `@mastra/pg` v1.12.1, `@mastra/core` v1.41.0, `@mastra/memory` v1.20.2).
+
+### Verified export names
+
+| Symbol | Package | Status |
+|--------|---------|--------|
+| `PostgresStore` | `@mastra/pg` | ✅ correct — **`PgStore` does not exist** |
+| `PgVector` | `@mastra/pg` | ✅ correct |
+| `ModelRouterEmbeddingModel` | `@mastra/core/llm` | ✅ correct |
+| `Memory` | `@mastra/memory` | ✅ correct |
+
+### Constructor requirements
+
+Both `PostgresStore` and `PgVector` require an **`id` field** in their config — without it TypeScript errors at compile time:
+
+```typescript
+new PostgresStore({ id: 'parrott-storage', connectionString: DATABASE_URL })
+new PgVector({ id: 'parrott-vector', connectionString: DATABASE_URL })
+```
+
+### Message format for saveMessages
+
+`saveMessages` expects `MastraDBMessage[]` (not `MastraMessageV1[]`). Content must use the V2 format:
+
+```typescript
+content: {
+  format: 2,
+  parts: [{ type: 'text', text: 'message text here' }],
+}
+```
+
+### Key API methods (verified)
+
+| Method | Notes |
+|--------|-------|
+| `memory.saveThread({ thread })` | Creates/upserts a thread |
+| `memory.saveMessages({ messages })` | Saves `MastraDBMessage[]`; auto-embeds for semantic recall |
+| `memory.getContext({ threadId, resourceId })` | Returns `{ messages, systemMessage, ... }` for LLM turn |
+| `memory.recall({ threadId, resourceId, vectorSearchString })` | Semantic recall — pass `vectorSearchString` for vector search |
+| `memory.updateWorkingMemory({ threadId, resourceId, workingMemory })` | Persist working memory string |
+| `memory.getWorkingMemory({ threadId, resourceId })` | Read working memory string |
+
+### Connection pooler choice
+
+**Use the transaction pooler (port 6543).** Tested against all three options:
+
+| Mode | Port | Result |
+|------|------|--------|
+| Transaction pooler | 6543 | ✅ Works — Mastra's CRUD queries have no session-level deps |
+| Direct connection | 5432 | ❌ `ENOTFOUND` — requires IPv6 or paid IPv4 add-on |
+| Session pooler | 5432 | ❌ `EMAXCONNSESSION` — Mastra's parallel init (~30 tables) exceeds free-tier 15-connection cap |
+
+Mastra doesn't use prepared statements, advisory locks, LISTEN/NOTIFY, or session-level SET — all the things that break under transaction pooler. Regular CRUD is fine.
+
+### SSL fix — `sslmode=require` + Supabase
+
+`sslmode=require` in the connection string now triggers `verify-full` behavior in pg ≥8 (warns about this). Supabase's pooler cert chain isn't in Node's default trust store, causing `SELF_SIGNED_CERT_IN_CHAIN`.
+
+**Dev/spike fix:** `NODE_TLS_REJECT_UNAUTHORIZED=0` env var.
+
+**Production fix (pick one):**
+- Pass `ssl: { rejectUnauthorized: false }` via `pgPoolOptions` in `PostgresStore`/`PgVector` config. Acceptable for a private friend-group bot.
+- Or use `?uselibpqcompat=true&sslmode=require` in the URL (libpq-compatible mode, weaker but not blind).
+
+For the NestJS app, add `ssl: { rejectUnauthorized: false }` in `pgPoolOptions` rather than setting a global env var.
+
+### Tables auto-created by Mastra
+
+Mastra creates its full platform schema on first init. Tables relevant to us:
+
+| Table | Purpose |
+|-------|---------|
+| `mastra_threads` | Thread records |
+| `mastra_messages` | Message history |
+| `mastra_resources` | Resource (user) records |
+| `mastra_observational_memory` | Observational memory records |
+| `memory_messages` | Secondary message store (vector-indexed) |
+
+Full list created (can be ignored but don't drop): `mastra_agent_versions`, `mastra_agents`, `mastra_ai_spans`, `mastra_background_tasks`, `mastra_channel_config`, `mastra_channel_installations`, `mastra_dataset_items`, `mastra_dataset_versions`, `mastra_datasets`, `mastra_experiment_results`, `mastra_experiments`, `mastra_favorites`, `mastra_mcp_client_versions`, `mastra_mcp_clients`, `mastra_mcp_server_versions`, `mastra_mcp_servers`, `mastra_notifications`, `mastra_prompt_block_versions`, `mastra_prompt_blocks`, `mastra_schedule_triggers`, `mastra_schedules`, `mastra_scorer_definition_versions`, `mastra_scorer_definitions`, `mastra_scorers`, `mastra_skill_blobs`, `mastra_skill_versions`, `mastra_skills`, `mastra_workflow_snapshot`, `mastra_workspace_versions`, `mastra_workspaces`.
+
+---
+
 ## Mastra configuration
 
 > **Where this lives:** memory config sits in `core/memory` (framework-free). The Mastra agent that uses it is instantiated inside a **NestJS provider** (singleton) and injected where needed. The transport below (TCP Postgres) is unchanged by NestJS. See [`architecture.md`](architecture.md).
 
 ```typescript
 import { Memory } from '@mastra/memory'
-import { PgStore, PgVector } from '@mastra/pg'        // ⚠️ verify export name — see note
+import { PostgresStore, PgVector } from '@mastra/pg'   // ✅ verified — NOT PgStore
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const memory = new Memory({
-  storage: new PgStore({
+  storage: new PostgresStore({
     id: 'parrott-storage',
-    connectionString: process.env.DATABASE_URL,   // Supabase pooler URL, ?sslmode=require
+    connectionString: process.env.DATABASE_URL,
+    pgPoolOptions: { ssl: { rejectUnauthorized: false } }, // Supabase cert fix
   }),
   vector: new PgVector({
     id: 'parrott-vector',
     connectionString: process.env.DATABASE_URL,
+    pgPoolOptions: { ssl: { rejectUnauthorized: false } }, // Supabase cert fix
   }),
   // REQUIRED for semantic recall — without an embedder it silently won't work
   embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
@@ -77,7 +163,7 @@ const memory = new Memory({
 })
 ```
 
-**⚠️ Import name:** Mastra's own docs are inconsistent — the semantic-recall example imports `PgStore` while the storage reference page uses `PostgresStore`. Verify the actual export in the installed `@mastra/pg` version before writing code. They may be aliases; do not assume.
+**✅ Import name resolved (Task 0 spike):** Use `PostgresStore` — `PgStore` does not exist in `@mastra/pg` v1.12.1+. Both classes also require an `id` field in their config.
 
 Called per turn:
 ```typescript

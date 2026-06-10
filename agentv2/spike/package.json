@@ -1,0 +1,20 @@
+{
+  "name": "parrott-v2-spike",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "spike": "node --env-file=.env dist/spike.js",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/pg": "latest",
+    "@types/pg": "^8.20.0",
+    "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

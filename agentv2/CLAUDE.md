@@ -95,6 +95,7 @@ All design work done. Zero runtime code written. See `agentv2/docs/status.md` fo
 | `agentv2/docs/architecture.md` | **Architecture** — ports & adapters, boundary rule, connection map, ESM/CJS gotcha + fix |
 | `agentv2/docs/gap-analysis.md` | **Second-pass review** — v1 parity gaps (allowlist, rate limit, delivery routing, dashboard-compat writes) |
 | `agentv2/docs/features.md` | **Feature catalog + feature flags** — 4-category taxonomy, `parrot_feature_flags` schema, status lifecycle |
+| `agentv2/docs/frontend-plan.md` | **Dashboard (FE) plan** — the `client/` deltas (Features page, allowlist editor, control repoint), each gated on a brain task |
 | `agentv2/docs/status.md` | Implementation status + open questions across all v2 work |
 | `agentv2/docs/memory-plan.md` | **Current** memory design (Mastra two-store, config, multi-user scope) |
 | `agentv2/tools/remember/remember.md` | What's worth remembering — folds into agent instructions / WM template |

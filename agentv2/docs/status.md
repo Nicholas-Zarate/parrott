@@ -1,6 +1,6 @@
 # Parrott v2 — Implementation Status
 
-> Sequenced build steps live in [`../plan.md`](../plan.md) (the orchestrator). Architecture in [`architecture.md`](architecture.md); parity gaps in [`gap-analysis.md`](gap-analysis.md); feature catalog + flags in [`features.md`](features.md). This file tracks granular state; keep all in sync.
+> Sequenced build steps live in [`../plan.md`](../plan.md) (the orchestrator). Architecture in [`architecture.md`](architecture.md); parity gaps in [`gap-analysis.md`](gap-analysis.md); feature catalog + flags in [`features.md`](features.md); dashboard work in [`frontend-plan.md`](frontend-plan.md). This file tracks granular state; keep all in sync.
 
 Last updated: 2026-06-10
 
@@ -45,8 +45,8 @@ Legend: ✅ Done · 🔲 Not started · 🚧 In progress
 |------|--------|-------|
 | Personality config source | ✅ | Reuse v1's existing live `parrot_*` tables — **no new migration**. `db/personality/personality.sql` is superseded/reference-only |
 | Mastra Postgres storage tables | 🔲 | Auto-created by `@mastra/pg` on first run |
-| pgvector extension enabled in Supabase | 🔲 | Required for semantic recall |
-| Mastra PgVector table setup | 🔲 | ⚠️ Known rough edges with Supabase — see note below |
+| pgvector extension enabled in Supabase | ✅ | Enabled on new project cuysugewduqfygsbauec |
+| Mastra PgVector table setup | ✅ | Auto-created by @mastra/pg on first run — see memory-plan.md |
 | New: channel-allowlist/rate-tier table (`parrot_*`) | 🔲 | G2 — **new migration** (dashboard-editable); unlike personality which reuses existing tables |
 | New: `parrot_feature_flags` table | 🔲 | Feature catalog gate (key/category/enabled/status). New migration. See `features.md` |
 
@@ -86,7 +86,10 @@ Legend: ✅ Done · 🔲 Not started · 🚧 In progress
 | Cron jobs → `@nestjs/schedule` (`src/jobs/`) | 🔲 | Port v1 `node-cron` (announcements, voice-quick-comment) |
 | Control endpoint (`src/control/`) | 🔲 | Guarded: `reload`/`state`/`trigger`. Next.js calls it; replaces `restart_requests` poll |
 | Discord-only tools (`join_voice`) | 🔲 | `platforms/discord/` — poll removed from v2 |
-| Dashboard Features page (`client/app/features/`) | 🔲 | Toggle features + status badges; drills into granular flags. Client work (Task 8) |
+| Dashboard Features page (`client/app/features/`) | 🔲 | Toggle features + status badges; drills into granular flags. FE — after Task 2. See `frontend-plan.md` |
+| Dashboard allowlist/tiers editor | 🔲 | Edit new allowlist `parrot_*` table (G2). FE — after Task 3 |
+| `request-restart` repoint (`client/app/api/request-restart/`) | 🔲 | Call control endpoint, not DB-poll. FE — after Task 7 |
+| Model-picker format (`client/app/settings/model/`) | 🔲 | Optional — preferred is bot-side mapping (no FE change). FE — after Task 2 |
 
 ---
 
