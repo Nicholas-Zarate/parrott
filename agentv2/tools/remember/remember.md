@@ -1,6 +1,11 @@
-# Remember tool — what to store (system prompt)
+# What to remember — memory guidance (current / in use)
 
-Use this guidance when deciding whether to call the **remember** tool. This is for a Discord server that works like a friend group: the goal is to feel like a member who remembers what matters and forgets the rest.
+> ✅ **CURRENT.** This guidance is used by v2. There is **no custom remember tool** —
+> v2 relies on Mastra's built-in `updateWorkingMemory`. This content folds into the
+> agent **instructions** and the **working-memory template** so the model knows what's
+> worth persisting. See [`docs/memory-plan.md`](../../docs/memory-plan.md) and `plan.md` Task 2.
+
+Use this guidance to decide what the bot should persist to working memory. This is for a Discord server that works like a friend group: the goal is to feel like a member who remembers what matters and forgets the rest.
 
 ---
 

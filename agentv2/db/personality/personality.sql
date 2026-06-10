@@ -1,3 +1,13 @@
+-- ⚠️ SUPERSEDED / NOT IN USE (as of 2026-06-09) ⚠️
+-- v2 reuses v1's existing `parrot_*` tables for personality/prompt config
+-- (parrot_tones, parrot_prompt_sections, parrot_tool_descriptions,
+--  parrot_runtime_config, parrot_voice_dimensions). Those are the live source
+-- of truth and are wired to the Next.js dashboard.
+--
+-- This single-markdown design was for the abandoned greenfield approach. It is
+-- kept ONLY as a reference schema in case a v2-owned personality table is ever
+-- needed. Do NOT apply this migration. See agentv2/docs/status.md.
+
 -- Personality: single row or keyed rows holding markdown content.
 -- Use for agent personality instructions; content is markdown, updated_at tracks changes.
 
