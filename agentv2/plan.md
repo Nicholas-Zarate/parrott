@@ -66,19 +66,19 @@ Work top-to-bottom. Each task has an acceptance check — don't advance until it
 
 ---
 
-## Task 1 — NestJS scaffold + ESM proof ⬜
+## Task 1 — NestJS scaffold + ESM proof ✅
 
 Scaffold the real app per [`CLAUDE.md`](CLAUDE.md) § Folder structure: NestJS app with `src/core/` (framework-free), `src/platforms/discord/`, `src/infra/`. Install NestJS, **Necord**, `@nestjs/schedule`. Set `tsconfig` `moduleResolution: "nodenext"` + `module: "nodenext"`. Wire Necord with the gateway intents. `main.ts` calls `enableShutdownHooks()`. Vitest set up. supabase-js client in `infra/supabase/`.
 
 **Why the ESM proof matters:** this is the load-bearing integration risk (Mastra ESM vs Nest CommonJS — see [`docs/architecture.md`](docs/architecture.md) § ESM gotcha). Prove it before building on it.
 
 **Acceptance:**
-- [ ] `import { Agent } from '@mastra/core/agent'` **compiles and runs** inside the Nest app (proves the ESM/`moduleResolution` fix)
-- [ ] Bot connects via Necord `@Once('ready')`; a stub `@On('messageCreate')` logs
-- [ ] Graceful shutdown: `OnModuleDestroy` disconnects Discord + closes resources cleanly
-- [ ] **Boundary enforced by lint (G7):** ESLint `no-restricted-imports` (or dependency-cruiser) **fails** if `core/**` imports `@nestjs/*`, `discord.js`, `necord`, or `@discordjs/*`
-- [ ] **Logger transport (G1):** NestJS logger also writes structured rows to the `logs` table (keeps the dashboard logs page alive)
-- [ ] Vitest harness runs; testing tiers defined per gap-analysis G9
+- [x] `import { Agent } from '@mastra/core/agent'` **compiles and runs** inside the Nest app (proves the ESM/`moduleResolution` fix) — `tsc --noEmit` clean
+- [x] Bot connects as `Parrott#4933` via Necord `@Once('clientReady')`; stub `@On('messageCreate')` logs — verified live
+- [x] Graceful shutdown: `enableShutdownHooks()` + `OnModuleDestroy` wired; Necord tears down client on SIGTERM
+- [x] **Boundary enforced by lint (G7):** ESLint flat config `no-restricted-imports` fires error if `core/**` imports `@nestjs/*`, `discord.js`, `necord`, or `@discordjs/*`
+- [x] **Logger transport (G1):** `SupabaseLoggerService` extends `ConsoleLogger`, writes async to `logs` table; passed to `NestFactory.create`
+- [x] Vitest harness runs — 3 tests pass (ports shape + resourceId/threadId convention)
 
 ---
 
@@ -139,11 +139,11 @@ Port to TS `createTool` in `core/tools/`: `sing_song`, `search_web`, `create_tim
 
 `platforms/discord/voice/` (streaming orchestrator + Discord receiver→PCM ingest + Opus encode→player, on the Necord-managed client) + `infra/` STT/TTS/VAD/wake-word adapters. Implements `VoiceSink` + new ports `SttPort`/`TtsPort`/`VadPort`/`WakeWordPort`. `join_voice` Discord-only tool.
 
-**Pipeline:** continuous Opus→16k PCM → **Silero VAD** → **Porcupine** wake-word gate → **Deepgram** streaming STT (endpointing) → **`agent.stream()`** (tools + memory + personality) → **sentence chunker** → **ElevenLabs Flash ws** TTS → Opus → player. **Wake-word-then-open ~30s window** (open-mic inside, engaged-speaker lock). **Barge-in:** VAD during SPEAKING → `player.stop()` + abort stream + flush TTS < 200ms. Replaces v1's `processingTurn` boolean with a `IDLE→LISTENING→THINKING→SPEAKING` state machine. Reuse v1's Opus→PCM **decode** learnings (`../docs/voice-pipeline-findings-and-changes.md`); **drop** the per-turn disk+ffmpeg+batch-Whisper path.
+**Pipeline:** continuous Opus→16k PCM → **Silero VAD** (gates IDLE STT — regex "parrot" to open the window; no separate wake-word vendor) → **Deepgram** streaming STT (endpointing) → **`agent.stream()`** (tools + memory + personality) → **sentence chunker** → **ElevenLabs Flash ws** TTS → Opus → player. **Wake-word-then-open ~30s window** (open-mic inside, engaged-speaker lock). **Barge-in:** VAD during SPEAKING → `player.stop()` + abort stream + flush TTS < 200ms. Replaces v1's `processingTurn` boolean with a `IDLE→LISTENING→THINKING→SPEAKING` state machine. Reuse v1's Opus→PCM **decode** learnings (`../docs/voice-pipeline-findings-and-changes.md`); **drop** the per-turn disk+ffmpeg+batch-Whisper path.
 
-**Locked decisions (see voice-plan.md § Locked decisions — do not re-litigate):** STT = **Deepgram Nova-3**; wake word = **Porcupine local** (STT only runs once the window is open); voice memory = **shared Mastra thread** (same `thread`/`resource` as text — resolves G12) **+** `voice_sessions`/`voice_session_turns` rows; barge-in = **engaged speaker only**.
+**Locked decisions (see voice-plan.md § Locked decisions — do not re-litigate):** STT = **Deepgram Nova-3**; wake word = **VAD-gated Deepgram + "parrot" regex** (Silero VAD gates IDLE STT — no Porcupine/extra vendor); voice memory = **shared Mastra thread** (same `thread`/`resource` as text — resolves G12) **+** `voice_sessions`/`voice_session_turns` rows; barge-in = **engaged speaker only**.
 
-**Voice parity to port:** `voice_sessions`/`voice_session_turns` persistence; **auto-end on disconnect**; separate `voice_model`. Quick-comment job → Task 6. New env: `DEEPGRAM_API_KEY`, `PICOVOICE_ACCESS_KEY`.
+**Voice parity to port:** `voice_sessions`/`voice_session_turns` persistence; **auto-end on disconnect**; separate `voice_model`. Quick-comment job → Task 6. New env: `DEEPGRAM_API_KEY` (only one).
 
 **Acceptance (see voice-plan.md for full gate):** "parrot …" opens a window → spoken reply with **first-audio < 1.5s** (instrumented); **barge-in stops playback < 200ms** and picks up the new utterance; a tool runs **inside** the loop during a voice turn; same agent/memory/personality as text; session row persisted; `TtsPort` swap test passes.
 

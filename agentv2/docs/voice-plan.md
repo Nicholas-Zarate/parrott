@@ -39,9 +39,9 @@ Keep STT / agent / TTS as separate best-of-breed services, but make each **strea
 Discord Opus (per speaker)
    │  decode + downsample (continuous, no disk)
    ▼
-[VAD]  ──armed?──►  Wake-word gate ──► conversational window open
+[Silero VAD]  ──speech?──►  IDLE: gate STT, regex "parrot" ──► conversational window open
    │                                         │
-   ▼ (frames)                                ▼
+   ▼ (speech frames only — VAD-gated)        ▼
 Streaming STT  ──interim+final, endpointing──►  Mastra agent.stream()
                                                   │ tools + memory + personality
                                                   │ tokens → sentence chunker
@@ -60,9 +60,9 @@ Streaming STT  ──interim+final, endpointing──►  Mastra agent.stream()
 flowchart TD
     A["Discord voice<br/>Opus per speaker"] --> B["Decode Opus → 48k PCM<br/>downsample → 16k<br/>(continuous, no disk)"]
     B --> V{"Silero VAD<br/>(local, ~1ms/frame)"}
-    V -->|"speech frames"| S{"Session state?"}
-    S -->|"IDLE"| W["Porcupine<br/>wake-word gate"]
-    W -->|"'parrot' detected"| OPEN["Open ~30s window<br/>lock engaged speaker"]
+    V -->|"speech frames only<br/>(VAD-gated)"| S{"Session state?"}
+    S -->|"IDLE"| W["Deepgram STT<br/>regex 'parrot'"]
+    W -->|"'parrot' matched"| OPEN["Open ~30s window<br/>lock engaged speaker"]
     S -->|"window open"| STT
     OPEN --> STT["Deepgram streaming STT<br/>interim + final + endpoint"]
     STT -->|"final transcript"| AG["Mastra agent.stream()<br/>tools + memory + personality"]
@@ -90,16 +90,15 @@ STT+endpointing layer** behind `SttPort` — see "Future realtime swap-in."
 | Stage | Recommendation | Why / notes |
 |------|----------------|-------------|
 | **VAD** | **Silero VAD** via `onnxruntime-node` (or `@ricky0123/vad-node`) | Tiny ONNX model, ~1ms/frame, local on the 48k→16k PCM. Drives endpointing assist **and barge-in** so we don't pay cloud STT to notice the user started talking. |
-| **Wake word** | **Porcupine** (`@picovoice/porcupine-node`), custom "parrot" keyword | Local, cheap, always-on. Lets the bot sit in a busy group channel **without streaming everyone to cloud STT 24/7**. Fallback: run STT and regex-match the trigger (higher cost). |
+| **Wake word** | **VAD-gated Deepgram + "parrot" regex** | Silero VAD (already in the pipeline) gates the cloud STT: in IDLE, only **speech** frames reach Deepgram; silence is free. Regex the transcript for the trigger to open the window. **No extra vendor/account.** (A local Porcupine wake-word is the optimization if idle STT spend ever matters — same boundary.) |
 | **Streaming STT** | **Deepgram Nova-3** (websocket, `@deepgram/sdk`) | Voice-agent default: ~100–300ms, interim + final, **built-in endpointing/utterance-end**, cheap. Replaces batch Whisper. Alt: OpenAI `gpt-4o-transcribe` streaming (one fewer vendor — already have `OPENAI_API_KEY`). OSS: self-hosted faster-whisper streaming (infra burden). |
 | **Agent** | **Mastra `agent.stream()`** with tools/memory/personality | Already the v2 core. Stream tokens; keep the **separate `voice_model`** (fast model) v1 supports. Tools run in the loop unchanged. |
 | **Sentence chunker** | small util in `voice/` — buffer tokens, flush on sentence/clause boundary | The key pipelining trick: forward the **first complete sentence** to TTS instead of waiting for the full completion. This is what gets first-audio under ~1.5s. |
 | **Streaming TTS** | **ElevenLabs websocket input-streaming** + `eleven_flash_v2_5` (~75ms) | Keep for now (v1 already uses Flash for quick comments — `tts.js:23`). Feed sentence chunks in, get audio out; multi-context socket supports flush/interrupt. **Swappable** behind `TtsPort`. Lower-latency commercial alt: **Cartesia Sonic**. OSS: **Kokoro** (tiny, self-host). |
 | **Audio out** | ElevenLabs mp3/pcm chunks → **streaming** `createAudioResource(StreamType.Arbitrary)` (prism-media/ffmpeg transcodes → 48k Opus) | ⚠️ A transcode hop is **unavoidable** (Discord needs 48kHz **stereo**; ElevenLabs PCM tops out at 44.1kHz **mono**). The win over v1 is that it's **streaming, not a per-turn file+ffmpeg-spawn** — no disk, starts on the first chunk. Don't try to hand-feed `StreamType.Raw`; let prism handle the resample. |
 
-**Vendor delta from v1:** drop batch-Whisper file path → add Deepgram (STT) + Porcupine
-(wake word) + Silero (VAD). Keep ElevenLabs (now streaming). Keep Mastra. New env:
-`DEEPGRAM_API_KEY`, `PICOVOICE_ACCESS_KEY`.
+**Vendor delta from v1:** drop batch-Whisper file path → add Deepgram (STT) + Silero VAD
+(open-source, no account). Keep ElevenLabs (now streaming). Keep Mastra. **New env: `DEEPGRAM_API_KEY`** (only one new key).
 
 ---
 
@@ -108,7 +107,7 @@ STT+endpointing layer** behind `SttPort` — see "Future realtime swap-in."
 A per-session **state machine** replaces v1's `processingTurn` boolean:
 
 ```
-IDLE  ──(Porcupine wake word OR "parrot ..." in STT)──►  LISTENING
+IDLE  ──("parrot ..." matched in VAD-gated STT)──►  LISTENING
 LISTENING ──(STT endpoint / utterance-end)──►  THINKING
 THINKING ──(first sentence ready)──►  SPEAKING
 SPEAKING ──(TTS done)──►  LISTENING            [window still open]
@@ -155,12 +154,12 @@ Self-echo is a non-issue: Discord's receiver doesn't loop the bot's own playback
 Per [`architecture.md`](architecture.md) — deps point inward; Discord/Nest stay out of `core/`:
 
 - **`core/`** — Mastra agent exposes the **streaming** method (tokens + tool events). New ports
-  (plain types only) in `core/ports/`: `SttPort`, `TtsPort`, `VadPort`, `WakeWordPort` — alongside
-  the existing `VoiceSink` (audio out).
+  (plain types only) in `core/ports/`: `SttPort`, `TtsPort`, `VadPort` — alongside
+  the existing `VoiceSink` (audio out). (No `WakeWordPort`: IDLE wake = regex over VAD-gated STT in the orchestrator.)
 - **`platforms/discord/voice/`** (Necord) — the streaming **orchestrator** (state machine) +
   Discord-specific bits: receiver→PCM ingest, Opus encode→player. `join_voice` stays a Discord-only tool.
-- **`infra/`** — `DeepgramStt` (`stt.service.ts`), `ElevenLabsTts` (`tts.service.ts`), `SileroVad`,
-  `PorcupineWakeWord` implement the ports. Swapping ElevenLabs→Cartesia = one adapter.
+- **`infra/`** — `DeepgramStt` (`stt.service.ts`), `ElevenLabsTts` (`tts.service.ts`), `SileroVad`
+  implement the ports. Swapping ElevenLabs→Cartesia = one adapter.
 - **Persistence + memory** — voice turns share the text Mastra thread
   (`thread = discord:${channelId}`, `resource = discord:${userId}` — decision #3, resolves G12),
   **and** write `voice_sessions` / `voice_session_turns` rows for session lifecycle/analytics
@@ -189,21 +188,20 @@ src/
     stt.port.ts          # start(opts) → emits partial / final / utteranceEnd
     tts.port.ts          # synthesize(sentenceStream) → audio chunks; flush(); close()
     vad.port.ts          # process(frame16k) → { isSpeech, prob }
-    wake-word.port.ts    # process(frame16k) → detected?
     voice-sink.port.ts   # (existing) audio out
+    # (no wake-word port — IDLE wake = regex over VAD-gated STT, in the orchestrator)
   platforms/discord/voice/
     voice.module.ts          # Necord submodule; wires providers
     voice-session.manager.ts # @Injectable singleton: Map<guildId, VoiceSession>; OnModuleDestroy → tear down all
     voice-session.ts         # PLAIN class: the IDLE→LISTENING→THINKING→SPEAKING machine, one per guild
-    audio-ingest.ts          # receiver.subscribe(Manual) → opus decode → 48k PCM → 16k frames (for VAD/wake/STT)
+    audio-ingest.ts          # receiver.subscribe(Manual) → opus decode → 48k PCM → 16k frames (for VAD/STT)
     audio-output.ts          # TtsPort chunks → prism transcode → Opus → AudioPlayer
     sentence-chunker.ts      # token buffer → sentence flush
     join-voice.tool.ts       # Discord-only tool
   infra/voice/
     deepgram-stt.service.ts        # implements SttPort  (ws)
     elevenlabs-tts.service.ts      # implements TtsPort  (ws, eleven_flash_v2_5)
-    silero-vad.service.ts          # implements VadPort  (onnxruntime-node)
-    porcupine-wakeword.service.ts  # implements WakeWordPort (native)
+    silero-vad.service.ts          # implements VadPort  (onnxruntime-node) — also gates IDLE STT
 ```
 
 **Lifecycle:** open the Deepgram + ElevenLabs websockets **on window-open**, close them on
@@ -218,7 +216,7 @@ voice connections + closes all sockets + releases native handles (rides on Task 
 | **Barge-in must abort the LLM** | ✅ **Supported.** Mastra `agent.stream({ abortSignal, onAbort })` forwards the signal to in-flight tool executions too. | `AbortController` per turn; `.abort()` on barge-in. Even without it, stopping playback + flushing TTS is enough — the rest is wasted tokens. |
 | **TTS audio → Discord format** | ⚠️ **Real friction, solved.** Discord raw PCM needs **48kHz stereo s16le**; ElevenLabs PCM tops out at **44.1kHz mono**. | Feed ElevenLabs **mp3/pcm chunks** into a **streaming** `createAudioResource(StreamType.Arbitrary)` — `prism-media`/ffmpeg transcodes to 48k Opus (deps already present). Streaming, not file-based, so cheap. **Verify first-audio budget holds** through the transcode. |
 | **Silero VAD in Node** | ✅ **Mature.** `@ricky0123/vad-node` / `avr-vad` over `onnxruntime-node`; ~1ms per 30ms frame. | Frame-by-frame on the 16k ingest stream. |
-| **Native deps in deploy image** | ⚠️ **Watch at deploy.** `onnxruntime-node`, `@picovoice/porcupine-node`, `@discordjs/opus` are native. | Bake prebuilt binaries into the Docker image; ties to the open "deployment target" decision. |
+| **Native deps in deploy image** | ⚠️ **Watch at deploy.** `onnxruntime-node` (Silero) + `@discordjs/opus` are native. | Bake prebuilt binaries into the Docker image; ties to the open "deployment target" decision. |
 | **Mastra `stream()` API churn** | ⚠️ **Newish (v1, Jan 2026).** `stream` vs `streamVNext` naming. | Pin `@mastra/core`; confirm the streaming surface in the Phase-4 spike before building on it. |
 | **Discord receive reliability** | ✅ **Net improvement.** v1 fought `AfterSilence`/never-ending streams ([findings doc](../../docs/voice-pipeline-findings-and-changes.md)). | Continuous `EndBehaviorType.Manual` subscription + **our own** VAD/Deepgram endpointing sidesteps the v1 flakiness entirely. |
 | **Barge-in history truncation** | ⚠️ **Cosmetic.** Hard to know exactly how much TTS actually played before stop. | Best-effort: mark the turn interrupted; approximate spoken text by elapsed playback time. Doesn't affect function. |
@@ -236,7 +234,7 @@ voice connections + closes all sockets + releases native handles (rides on Task 
    - **Gate:** all three pass (barge-in < 200ms, abort works, transcode hop leaves headroom under the 1.5s budget) before Phase 1. On fail: reconsider TTS vendor (Cartesia) or raw-Opus output path.
 1. **Ingest + VAD** — productionize Phase 0(a): per-speaker Opus→16k frames, VAD as a `VadPort` adapter.
 2. **Streaming STT** — Deepgram websocket: interim + final + utterance-end → transcripts. Verify endpoint latency.
-3. **Wake-word gate + state machine** — Porcupine arm/disarm, 30s window, engaged-speaker lock.
+3. **Wake gate + state machine** — IDLE: VAD-gated Deepgram + "parrot" regex opens the ~30s window; engaged-speaker lock.
 4. **Streaming agent + sentence chunker** — `agent.stream()`, flush first sentence early.
 5. **Streaming TTS out** — ElevenLabs ws input-streaming → Arbitrary transcode → player, sentence-by-sentence.
 6. **Barge-in** — stop/abort/flush/truncate on VAD during SPEAKING (productionize Phase 0(a+b)).
@@ -260,6 +258,6 @@ voice connections + closes all sockets + releases native handles (rides on Task 
 | # | Decision | Choice | Consequence for the build |
 |---|----------|--------|---------------------------|
 | 1 | **STT vendor** | **Deepgram Nova-3** (websocket, `@deepgram/sdk`) | Use Deepgram's interim+final + built-in endpointing/utterance-end to drive the `LISTENING→THINKING` transition. New env `DEEPGRAM_API_KEY`. Silero VAD is still used for **barge-in** (cheaper than relying on STT to notice speech during playback). |
-| 2 | **Wake word** | **Porcupine local** (`@picovoice/porcupine-node`), custom "parrot" keyword | In IDLE, **do not** stream the channel to Deepgram — run Porcupine on local PCM. Deepgram STT spins up **only after** wake word opens the window (or while window is open). New env `PICOVOICE_ACCESS_KEY` (free tier). |
+| 2 | **Wake word** | **VAD-gated Deepgram + "parrot" regex** (no Porcupine) | In IDLE, **Silero VAD gates the cloud STT** — only frames VAD marks as speech go to Deepgram; silence is free. Regex the transcript for "parrot"/"sir parrot" to open the window. **Reuses the stack we already have (no extra vendor, no account, one fewer native dep).** Tradeoff: pays Deepgram for group *speech* during IDLE (≈half a cent / minute of actual talking — negligible at friend-group scale). Porcupine local wake-word remains a drop-in optimization behind the same boundary **if** idle STT cost ever bites. |
 | 3 | **Voice memory** | **Shared Mastra thread** | Voice turns use the **same** `thread = discord:${channelId}` / `resource = discord:${userId}` as text (memory-plan.md) — cross-surface memory works (ask in chat → reference in voice). **Also** keep `voice_sessions` / `voice_session_turns` rows for session lifecycle + analytics. This resolves gap-analysis **G12**. |
 | 4 | **Barge-in scope** | **Engaged speaker only** | Only the `userId` that opened the window can interrupt (the engaged-speaker lock already tracks this). Ignore VAD from other speakers during SPEAKING. |

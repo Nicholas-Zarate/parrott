@@ -4,7 +4,7 @@
   "description": "Parrott Discord bot v2 — NestJS shell + Mastra core",
   "type": "module",
   "scripts": {
-    "start:dev": "tsx watch src/main.ts",
+    "start:dev": "node --env-file=.env node_modules/tsx/dist/cli.mjs watch src/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",

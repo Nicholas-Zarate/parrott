@@ -1,7 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Once, On, Context, type ContextOf } from 'necord';
 import { Agent } from '@mastra/core/agent';
-import type { Client } from 'discord.js';
 
 /**
  * Discord event handlers — stub implementations for Task 1 (scaffold + ESM proof).
@@ -14,11 +13,9 @@ import type { Client } from 'discord.js';
 @Injectable()
 export class DiscordEventsService implements OnModuleDestroy {
   private readonly logger = new Logger(DiscordEventsService.name);
-  private client: Client | null = null;
 
-  @Once('ready')
-  onReady(@Context() [client]: ContextOf<'ready'>): void {
-    this.client = client;
+  @Once('clientReady')
+  onReady(@Context() [client]: ContextOf<'clientReady'>): void {
     this.logger.log(`✅ Bot connected as ${client.user.tag}`);
 
     // ── ESM proof gate ─────────────────────────────────────────────────────

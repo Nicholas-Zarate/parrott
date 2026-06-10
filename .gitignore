@@ -5,3 +5,6 @@ instructions/
 # Playwright stored auth (admin session for E2E)
 client/playwright/.auth/
 /agentv2/spike/node_modules
+/agentv2/node_modules
+/agentv2/.env
+/agentv2/dist
