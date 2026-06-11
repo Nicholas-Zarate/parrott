@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SupabaseModule } from './infra/supabase/supabase.module.js';
 import { BotCoreModule } from './infra/bot-core.module.js';
+import { VoiceInfraModule } from './infra/voice/voice-infra.module.js';
 import { DiscordModule } from './platforms/discord/discord.module.js';
 
 @Module({
@@ -20,7 +21,10 @@ import { DiscordModule } from './platforms/discord/discord.module.js';
     // ParrottAgentProvider, AllowlistService, RateLimitService
     BotCoreModule,
 
-    // Discord gateway via Necord
+    // STT/TTS/VAD infra services — @Global
+    VoiceInfraModule,
+
+    // Discord gateway via Necord (includes VoiceModule)
     DiscordModule,
   ],
 })

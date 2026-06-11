@@ -19,7 +19,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { AsyncLocalStorage } from 'async_hooks';
-import type { Agent } from '@mastra/core/agent';
+import type { Agent, ToolsInput } from '@mastra/core/agent';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import { createParrottAgent } from '../core/agents/parrott.js';
 import { buildTools } from '../core/tools/index.js';
@@ -46,6 +46,16 @@ export class ParrottAgentProvider implements OnModuleInit {
   private readonly logger = new Logger(ParrottAgentProvider.name);
   private agent!: Agent;
 
+  /** Core tools built at init from DB descriptions. */
+  private coreTools: ToolsInput = {};
+  /**
+   * Platform-specific tools registered after init (e.g. join_voice from VoiceModule).
+   * Kept separate from coreTools to avoid a DI cycle: the agent provider must not
+   * depend on platform modules. They register into this map; the agent's dynamic
+   * tools closure merges it at turn-time.
+   */
+  private readonly lateTools: ToolsInput = {};
+
   constructor(
     private readonly personality: PersonalityService,
     private readonly flags: FeatureFlagService,
@@ -56,7 +66,7 @@ export class ParrottAgentProvider implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     // Build tools with live descriptions from DB
     const descriptions = await this.personality.getActiveToolDescriptions();
-    const tools = buildTools(descriptions, {
+    this.coreTools = buildTools(descriptions, {
       timer: this.timerService,
       roastData: this.roastAdapter,
     });
@@ -75,10 +85,11 @@ export class ParrottAgentProvider implements OnModuleInit {
         return new ModelRouterLanguageModel(modelId);
       },
 
-      tools,
+      // Resolved per-turn so platform tools registered after init are included.
+      tools: () => ({ ...this.coreTools, ...this.lateTools }),
     });
 
-    this.logger.log(`Parrott Mastra agent initialised with ${Object.keys(tools).length} tools`);
+    this.logger.log(`Parrott Mastra agent initialised with ${Object.keys(this.coreTools).length} core tools`);
   }
 
   /**
@@ -90,6 +101,17 @@ export class ParrottAgentProvider implements OnModuleInit {
    */
   getAgent(): Agent {
     return this.agent;
+  }
+
+  /**
+   * Register a platform-specific tool after init (e.g. join_voice from VoiceModule).
+   * Avoids a DI cycle — platform modules depend on this provider, not vice versa.
+   * The agent's tools closure merges these at turn-time, so registration order
+   * relative to onModuleInit does not matter.
+   */
+  registerTool(name: string, tool: ToolsInput[string]): void {
+    this.lateTools[name] = tool;
+    this.logger.log(`Registered platform tool: ${name}`);
   }
 
   /**

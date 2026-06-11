@@ -3,6 +3,10 @@
  * Adapters (platforms/discord/) implement these; core/ only depends on them.
  */
 
+export type { SttPort, SttConnection, SttEvent, SttEventType, SttConnectOptions } from './stt.port.js';
+export type { TtsPort } from './tts.port.js';
+export type { VadPort, VadResult } from './vad.port.js';
+
 /** An incoming message, translated to plain types by the platform adapter. */
 export interface IncomingMessage {
   /** Raw text of the message (after stripping the @mention). */

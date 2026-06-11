@@ -95,8 +95,8 @@ Tasks 0–2 complete. Bot runs and connects. See `plan.md` for the full task log
 | 2 — Parrott agent (text) | ✅ | PersonalityService, FeatureFlagService, ParrottAgentProvider, Mastra Agent |
 | 3 — Mention adapter | ✅ | MentionService pipeline, AllowlistService, RateLimitService, 40 tests |
 | 4 — Core tools | ✅ | 5 tools (search_web, sing_song, create_timer, run_roast, make_joke_like), 88 tests total |
-| 5 — Voice adapter | ⬜ | Next |
-| 6 — Activity + cron | ⬜ | |
+| 5 — Voice adapter | ✅* | Code complete: streaming cascade (Deepgram STT → agent.stream → OpenAI/ElevenLabs TTS), VAD/barge-in, `join_voice` tool, session persistence. *Runtime gates (first-audio, barge-in timing) pending live VC test |
+| 6 — Activity + cron | ⬜ | Next |
 | 7 — Control endpoint | ⬜ | |
 | 8 — Dashboard (FE) | ⬜ | |
 | 9 — Cutover | ⬜ | |

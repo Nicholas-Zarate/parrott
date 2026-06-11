@@ -19,14 +19,16 @@ export type InstructionsFn = () => string | Promise<string>;
 export type ModelFn = () =>
   | ModelRouterLanguageModel
   | Promise<ModelRouterLanguageModel>;
+/** Resolved per-turn so late-registered platform tools (e.g. join_voice) are picked up. */
+export type ToolsFn = () => ToolsInput | Promise<ToolsInput>;
 
 export interface ParrottAgentOptions {
   /** Async closure — returns the assembled system prompt (cached in PersonalityService). */
   instructions: InstructionsFn;
   /** Async closure — returns the ModelRouterLanguageModel for this turn. */
   model: ModelFn;
-  /** Tool instances to register with the agent (built in Task 4). */
-  tools?: ToolsInput;
+  /** Tool instances, or a closure resolving them per-turn (Task 4 core + platform tools). */
+  tools?: ToolsInput | ToolsFn;
 }
 
 // ── Factory ──────────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { NecordModule } from 'necord';
 import { IntentsBitField, Partials } from 'discord.js';
 import { DiscordEventsService } from './discord-events.service.js';
 import { MentionService } from './mention.service.js';
+import { VoiceModule } from './voice/voice.module.js';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { MentionService } from './mention.service.js';
       ],
       partials: [Partials.Channel, Partials.Message],
     }),
+    VoiceModule,
   ],
   providers: [DiscordEventsService, MentionService],
   exports: [DiscordEventsService],

@@ -173,9 +173,43 @@ Scaffold the real app per [`CLAUDE.md`](CLAUDE.md) § Folder structure: NestJS a
 
 ---
 
-## Task 5 — Voice adapter ⬜
+## Task 5 — Voice adapter ✅ (code complete — runtime gates pending live VC)
 
 > **Full design: [`docs/voice-plan.md`](docs/voice-plan.md).** Build a **streaming cascade**, not a port of v1's batch pipeline (v1 is 3–18s to first audio and can't be interrupted). Summary below; details, vendor rationale, and phased build live in the voice plan.
+
+**What was built ✅ (2026-06-10):**
+- `src/core/ports/{stt,tts,vad}.port.ts` — `SttPort` (connect→AsyncIterable events), `TtsPort` (`synthesize(): AsyncIterable<Buffer>`), `VadPort` (`process(frame)→{isSpeech,probability}`). Re-exported from `core/ports/index.ts`.
+- `src/infra/voice/deepgram-stt.service.ts` — Deepgram **v3** `createClient` + `listen.live()`; push-queue→AsyncIterable bridge; emits partial/final/utteranceEnd. (v5 SDK removed `createClient` — pinned `@deepgram/sdk@^3`.)
+- `src/infra/voice/openai-tts.service.ts` — default provider; `audio.speech.create` (tts-1, `OPENAI_TTS_VOICE`), yields one Buffer. Works with no extra subscription.
+- `src/infra/voice/elevenlabs-tts.service.ts` — `@elevenlabs/elevenlabs-js` (renamed from `elevenlabs`); `textToSpeech.stream` Flash v2.5, many chunks. Behind flag.
+- `src/infra/voice/discord-tts.service.ts` — router; `forGuild(guildId)` picks provider via `capability.tts.elevenlabs` flag.
+- `src/infra/voice/silero-vad.service.ts` — **energy-RMS** VadPort (no native deps). Silero ONNX is a documented TODO.
+- `src/infra/voice/voice-infra.module.ts` — `@Global` STT/TTS/VAD providers.
+- `src/platforms/discord/voice/audio-ingest.ts` — Discord receiver→Opus decode (`opusscript`)→48k stereo down to 16k mono, 30ms/1920-byte frames.
+- `src/platforms/discord/voice/audio-output.ts` — `TtsPort` chunks→PassThrough→`createAudioResource(Arbitrary)`→player; AbortSignal destroys stream for barge-in.
+- `src/platforms/discord/voice/sentence-chunker.ts` — buffers LLM tokens, flushes on sentence boundary for low first-audio.
+- `src/platforms/discord/voice/voice-session.ts` — `IDLE→LISTENING→THINKING→SPEAKING` state machine; wake regex; 30s window; engaged-speaker barge-in; `agent.stream()` via `guildContext.run(guildId,…)`; **persistence** (`voice_sessions` row + per-turn `voice_session_turns` via `saveTurn`); **per-turn TTS resolution** (mid-session flag swap).
+- `src/platforms/discord/voice/voice-session.manager.ts` — `@Injectable` singleton, `Map<guildId,VoiceSession>`; injects VAD/STT/TTS-router/agent/**supabase**; `join`/`leave`/`isActive`/`onModuleDestroy`.
+- `src/platforms/discord/voice/join-voice.tool.ts` + `voice.module.ts` — `join_voice` tool **registered late** via `ParrottAgentProvider.registerTool()` in `VoiceModule.onModuleInit` (breaks the AgentProvider↔Manager DI cycle; core/ can't import Discord).
+- `src/infra/parrott-agent.provider.ts` — `coreTools`/`lateTools` split; `tools` resolved per-turn closure; `registerTool()` seam.
+- `db/migrations/011_voice_sessions.sql` — delta: `end_reason` on sessions; `guild_id`/`channel_id`/`interrupted`/`first_audio_ms` on turns (v1 tables pre-existed). Applied ✅.
+- `parrot_feature_flags` row `capability.tts.elevenlabs` seeded (enabled=false, status='planned').
+
+**Implementation notes:**
+- Deepgram **v3** not v5 (v5 is Fern-generated, dropped `createClient`/`listen.live`). `connection.send` takes `ArrayBuffer` — slice the Buffer.
+- ElevenLabs SDK is `@elevenlabs/elevenlabs-js`, camelCase opts (`modelId`/`outputFormat`).
+- `opusscript` default export `OpusScript`; `.decode(frame)` 1-arg.
+- `join_voice` cannot go through core `buildTools` (Discord import ban) — late-registered; agent `tools` closure merges core+late at turn-time so init order is irrelevant.
+- Spike findings: `memory/task5-spike.md` (8/8 deps green after two fixups).
+
+**Done ✅ (2026-06-10):** `tsc --noEmit` clean · `vitest run` 88/88 ✅
+
+**Remaining runtime gates (need a live voice channel — not unit-testable):**
+- [ ] first-audio < 1.5s instrumented in a real call
+- [ ] barge-in stops playback < 200ms and resumes on new utterance
+- [ ] `TtsPort` swap test (flip flag mid-session → ElevenLabs takes over)
+- [ ] session row persisted + turn saved end-to-end against live Supabase
+- [ ] deferred Lows: `toolsCalled` extraction, Silero ONNX VAD, inter-sentence gap tuning
 
 `platforms/discord/voice/` (streaming orchestrator + Discord receiver→PCM ingest + Opus encode→player, on the Necord-managed client) + `infra/` STT/TTS/VAD/wake-word adapters. Implements `VoiceSink` + new ports `SttPort`/`TtsPort`/`VadPort`/`WakeWordPort`. `join_voice` Discord-only tool.
 
