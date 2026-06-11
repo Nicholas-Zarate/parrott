@@ -1,5 +1,5 @@
 import { Module, Global } from '@nestjs/common';
-import { getSupabaseAdmin } from './client.js';
+import { getSupabaseAdmin } from './supabase.client.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const SUPABASE_CLIENT = 'SUPABASE_CLIENT';
