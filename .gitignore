@@ -9,3 +9,4 @@ client/playwright/.auth/
 /agentv2/.env
 /agentv2/dist
 agentv2/example.env
+/node_modules/.vite/vitest
