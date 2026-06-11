@@ -4,8 +4,8 @@ import {
   type ToneRow,
   type PromptSectionRow,
   type ToolMetaRow,
-} from '../src/core/personality/format.js';
-import { buildMemoryScope } from '../src/core/memory/scope.js';
+} from '../src/core/personality/personality-format.js';
+import { buildMemoryScope } from '../src/core/memory/memory-scope.js';
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
