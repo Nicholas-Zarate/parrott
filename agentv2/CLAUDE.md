@@ -85,7 +85,21 @@ Most links are **not** HTTP. Gateway = WebSocket, voice = UDP, memory = TCP Post
 
 ## Current v2 state
 
-All design work done. Zero runtime code written. See `agentv2/docs/status.md` for the full breakdown.
+Tasks 0–2 complete. Bot runs and connects. See `plan.md` for the full task log.
+
+| Task | Status | What's live |
+|------|--------|-------------|
+| 0 — Mastra/Supabase spike | ✅ | Memory round-trip verified; findings in `docs/memory-plan.md` |
+| 1 — NestJS scaffold + ESM | ✅ | App boots, Necord connected as Parrott#4933, logger, ESLint boundary |
+| DB migrations (all 9) | ✅ | All `parrot_*` tables live in Supabase (`cuysugewduqfygsbauec`) |
+| 2 — Parrott agent (text) | ✅ | PersonalityService, FeatureFlagService, ParrottAgentProvider, Mastra Agent |
+| 3 — Mention adapter | ✅ | MentionService pipeline, AllowlistService, RateLimitService, 40 tests |
+| 4 — Core tools | ✅ | 5 tools (search_web, sing_song, create_timer, run_roast, make_joke_like), 88 tests total |
+| 5 — Voice adapter | ⬜ | Next |
+| 6 — Activity + cron | ⬜ | |
+| 7 — Control endpoint | ⬜ | |
+| 8 — Dashboard (FE) | ⬜ | |
+| 9 — Cutover | ⬜ | |
 
 ## Key v2 files
 
