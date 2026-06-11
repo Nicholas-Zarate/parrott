@@ -239,6 +239,7 @@ voice connections + closes all sockets + releases native handles (rides on Task 
 5. **Streaming TTS out** — ElevenLabs ws input-streaming → Arbitrary transcode → player, sentence-by-sentence.
 6. **Barge-in** — stop/abort/flush/truncate on VAD during SPEAKING (productionize Phase 0(a+b)).
 7. **Persistence** — `voice_sessions` / `voice_session_turns` rows; auto-end on disconnect.
+8. *(Deferred — pull when Deepgram cost > ~$20/mo)* **Local wake tier** — `VoskWakeSvc` for IDLE-mode keyword-spotting; Deepgram websocket opened only on window-open. See [Scale lever](#scale-lever-deferred--pull-when-cost-bites).
 
 ## Acceptance (replaces the thin Task 5 gate)
 
@@ -252,6 +253,37 @@ voice connections + closes all sockets + releases native handles (rides on Task 
   and the spoken reply reflects the result.
 - **Same brain:** same agent/memory/personality as text; session row persisted; auto-end on disconnect.
 - **Swap test:** flip `TtsPort` to a stub/second provider — proves ElevenLabs isn't load-bearing.
+
+## Scale lever (deferred — pull when cost bites)
+
+**Trigger:** Deepgram IDLE-mode spend exceeds ~$20/mo. At friend-group scale this is unlikely before months of heavy use, and the ports abstraction means the swap is mechanical. Don't build now.
+
+### What to build when triggered: two-tier IDLE STT
+
+Replace Deepgram in IDLE with a **local, accountless wake-word detector**. Only open the Deepgram websocket once the window is open (LISTENING state). Deepgram spend drops to *actual conversation time* — essentially zero for casual use.
+
+**Recommended local tier:** **Vosk** (offline STT, Apache 2.0)
+- Real Node native bindings (`vosk` npm, pre-built for Node 18+) — unlike openWakeWord (Python only)
+- Run keyword-spotting mode with `["parrot", "sir parrot", "[unk]"]` grammar
+- 16k mono PCM → model → text locally; no network call, no account
+- 40MB model download; runs fine on the same process (or a worker thread if CPU becomes a concern)
+- Alt: **openWakeWord** (Python/ONNX, trainable custom "parrot" keyword) — requires a small sidecar or `child_process`; more accurate but more infrastructure
+
+**Implementation sketch (one adapter):**
+```
+infra/voice/
+  vosk-wake.service.ts   # implements SttPort for IDLE state only
+                         # grammar = ["parrot", "sir parrot", "[unk]"]
+                         # emits { type: "wakeWord" } when "parrot" detected
+```
+- `VoiceSession` checks `state === IDLE ? voskWake.process(frame) : deepgramStt.process(frame)`
+- `SttPort` interface is unchanged — two implementations, selected by state
+- Deepgram websocket is never opened until `LISTENING` (opens on wake, closes on idle timeout)
+- Native dep: `vosk` (add alongside `onnxruntime-node` in the Docker bake step)
+
+**Acceptance for Phase 8:** wake fires on "parrot" from canned audio without a network call; Deepgram websocket not opened until window opens; swapping back to full-Deepgram IDLE = one line change.
+
+---
 
 ## Locked decisions (settled 2026-06-10 — builder: do not re-litigate)
 

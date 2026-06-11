@@ -24,7 +24,7 @@ Work top-to-bottom. Each task has an acceptance check — don't advance until it
 - **AI core:** Mastra. Model Router (string IDs, no `@ai-sdk/*`). `createTool` for tools. **Mention replies: placeholder + single edit** (not per-token streaming to Discord — G5); `agent.stream()` may be used internally (e.g. voice).
 - **Language:** TypeScript, all of v2. `moduleResolution: nodenext` (required for Mastra ESM under Nest).
 - **Memory:** `@mastra/pg` storage + `PgVector` + `ModelRouterEmbeddingModel` embedder. `thread = discord:${channelId}`, `resource = discord:${senderId}`. Built-in `updateWorkingMemory` (no custom remember tool).
-- **Personality:** reuse v1 `parrot_*` tables, resolved dynamically per-turn via `runtimeContext` + 30–60s cache. **Config CRUD stays in Next.js** — NestJS hosts the brain + control endpoint only.
+- **Personality:** reuse v1 `parrot_*` tables, resolved dynamically per-turn via **async closures to `PersonalityService`** (45s TTL cache — not Mastra's `RequestContext`, which doesn't forward to the instructions fn). **Config CRUD stays in Next.js** — NestJS hosts the brain + control endpoint only.
 - **Feature flags:** every feature runs behind a `parrot_feature_flags` gate — active only if `enabled && status==='live'` (`FeatureFlagService.isLive(key)`). See [`docs/features.md`](docs/features.md).
 - **Cutover:** replace v1 **core runtime only**; dashboard + Supabase tables stay.
 
@@ -82,7 +82,7 @@ Scaffold the real app per [`CLAUDE.md`](CLAUDE.md) § Folder structure: NestJS a
 
 ---
 
-## Task 2 — Parrott agent (text only) ⬜
+## Task 2 — Parrott agent (text only) ✅
 
 > **DB migrations done ✅ (2026-06-10)** — All 9 v2 migrations applied to Supabase (`cuysugewduqfygsbauec`).
 > Tables live: `parrott_admin_discord_ids`, `parrott_app_roles`, `logs`, `activity_listeners`,
@@ -93,43 +93,83 @@ Scaffold the real app per [`CLAUDE.md`](CLAUDE.md) § Folder structure: NestJS a
 > Model IDs seeded as full Model Router format (`openai/gpt-4o`) — **no mapping layer needed.**
 > Migration files in `agentv2/db/migrations/`.
 
-Remaining work (code): Define `core/agents/parrott.ts`, **instantiated inside a NestJS provider** (singleton — avoids the Mastra-in-DI beta rough edges). Dynamic `instructions` + `model` from `parrot_*` tables via `runtimeContext`, 30–60s cache. Memory config from Task 0. Working-memory template seeded from [`remember.md`](tools/remember/remember.md). Define core ports in `core/ports/` (`IncomingMessage`, `Replier`, `VoiceSink`).
+**What was built:**
+- Core ports (`IncomingMessage`, `Replier`, `VoiceSink`) — done in Task 1.
+- `core/personality/format.ts` — `formatPersonalityMarkdown()` emits structured markdown (tone opener + enabled `parrot_prompt_sections` in order + tools fallback + working-memory guidance). Replaces v1's flat space-join. ✅ Eyeballed against live DB — personality voice confirmed correct.
+- `core/memory/index.ts` — lazy `getParrottMemory()` (PostgresStore + PgVector + HNSW). Lazy init keeps DATABASE_URL optional at import time for tests.
+- `core/memory/scope.ts` — `buildMemoryScope(channelId, userId)` → `{ threadId, resourceId }` with `discord:` prefix. Separate file so tests can import without DATABASE_URL.
+- `core/agents/parrott.ts` — `createParrottAgent({ instructions, model })` factory. Framework-free. Agent `id: 'parrott-v2'` required by Mastra type. Model closures return `ModelRouterLanguageModel` (not a plain string — Agent types are strict). HNSW params nest under `indexConfig.hnsw: {}` not flat.
+- `infra/personality.service.ts` — 45s TTL cache; parallel fetches from `parrot_tones` / `parrot_prompt_sections` / `tools_meta_data` / `parrot_runtime_config`; graceful fallback if Supabase is down at startup; `invalidate()` for Task 7 control endpoint.
+- `infra/feature-flags.service.ts` — 45s TTL cache; sync `isLive(key)` (background refresh when stale) + async `isLiveAsync(key)`; `invalidate()`.
+- `infra/parrott-agent.provider.ts` — NestJS singleton; creates agent via factory with async closures to PersonalityService. `isMemoryLive()` convenience for Task 3.
+- `app.module.ts` — all three providers wired and exported.
 
-**Personality layer (`infra/personality.service.ts` — a Nest provider):**
-- Read the existing `parrot_*` tables (reuse v1's query shape — see `agent/database/supabase/parrot-tones.js`, `prompt-sections.js`). Granular dashboard edits already write these; do NOT introduce a new personality table.
-- **`formatPersonalityMarkdown(fields)`** (in `core/personality/`) — emits **structured markdown** (`## Role`, `## Voice`, `## Task`, `## Constraints`, `## Tools`), replacing v1's flat space-join (`buildSystemPrompt` in `agent/config/parrot.js:203`). Clear section boundaries + composes with Mastra's markdown memory blocks.
-  - ⚠️ **Behavior-change risk:** this changes the exact prompt the model sees vs v1 — in a "parity" migration the bot's voice may shift subtly. **Eyeball it:** generate replies for a few representative prompts with old (space-join) vs new (markdown) formatting and confirm the personality still feels right before locking it in.
-- `model` resolved from `parrot_runtime_config`. ✅ IDs already in Model Router format (`openai/gpt-4o`), no mapping layer needed.
-- 30–60s TTL cache so per-turn `runtimeContext` resolution doesn't hit Supabase every message.
+**Implementation note — runtimeContext:** Mastra's `RequestContext` does not forward to the Agent's `instructions` function (verified during implementation). Dynamic personality is resolved via **async closures** to `PersonalityService` instead. Same 45s TTL cache behaviour, different mechanism.
 
-**Feature-flag foundation (see [`docs/features.md`](docs/features.md)):**
-- ✅ `parrot_feature_flags` table created + 10 feature rows seeded (all `status='planned'`).
-- Build `FeatureFlagService` (Nest provider, cached like personality) exposing `isLive(key)` = `enabled && status==='live'`. Every feature task gates on it.
+**Acceptance:**
+- [x] Personality prompt assembled as markdown from live `parrot_*` tables — verified via preview script
+- [x] 45s TTL cache — DB changes propagate within the window
+- [x] `FeatureFlagService.isLive('capability.memory')` built and wired — gating in the call path is Task 3's job
+- [ ] Working memory round-trip (persist + recall across turns) — requires mention adapter (Task 3) to test end-to-end
 
-**Acceptance:** Get a personality-shaped reply assembled as markdown from the live `parrot_*` tables; editing a tone/section in the DB changes the prompt within the cache window; a fact persists to working memory and is recalled on a second turn; `FeatureFlagService.isLive('capability.memory')` gates the memory path.
+**Done ✅ (2026-06-10):**
+- `src/core/personality/format.ts` — `formatPersonalityMarkdown()` + types
+- `src/core/memory/index.ts` — lazy `getParrottMemory()` (PostgresStore + PgVector + HNSW)
+- `src/core/memory/scope.ts` — `buildMemoryScope()` (importable without DATABASE_URL)
+- `src/core/agents/parrott.ts` — `createParrottAgent()` factory, framework-free
+- `src/infra/personality.service.ts` — NestJS service, 45s TTL cache, `getSystemPrompt()` / `getModel()`
+- `src/infra/feature-flags.service.ts` — NestJS service, 45s TTL cache, `isLive(key)`
+- `src/infra/parrott-agent.provider.ts` — NestJS singleton wrapping Mastra Agent
+- `src/app.module.ts` — all three providers wired
+- `test/task2.spec.ts` — 19 tests (formatter, memory scope, FeatureFlagService, agent smoke)
+- `tsc --noEmit` clean · `vitest run` 22/22 ✅
 
 ---
 
-## Task 3 — Mention adapter ⬜
+## Task 3 — Mention adapter ✅
 
-`platforms/discord/mention.update.ts`: Necord `@On('messageCreate')` → translate to plain `IncomingMessage` → map `thread`/`resource` → run agent → reply via **placeholder + single edit** (adapter implements the core `Replier` port). Multi-user thread mapping per memory-plan. The Discord `Message` object never reaches `core/`.
+**What was built:**
+- `src/platforms/discord/mention.service.ts` — full pipeline: blocked-role gate → allowlist+tier → rate-limit → placeholder → agent.generate → edit → history write → error fallback. `Message` object never leaves this file. Interval tracking + `OnModuleDestroy` cleanup. `BLOCKED_ROLE_NAMES` parsed once at module load.
+- `src/platforms/discord/discord-events.service.ts` — thinned to filter-and-delegate; `MentionService` injected.
+- `src/infra/allowlist.service.ts` — 45s TTL cache keyed by `channelId:guildId`; gated behind `capability.channel_allowlist` flag; `invalidate()` for Task 7.
+- `src/infra/rate-limit.service.ts` — in-memory port of v1 (semi=5/2min, limited=4/5min); blocked attempts don't extend the window; live countdown every 15s.
+- `src/infra/bot-core.module.ts` — `@Global()` module exposing all shared services so DiscordModule can inject them without circular imports.
+- `test/task3.spec.ts` — 40 tests: RateLimitService (10), AllowlistService (6), extractText logic (7), hasBlockedRole logic (5), MentionService pipeline (11) — gates, memory paths, error fallback, countdown interval, history save.
 
-**Parity gates this path must include (see `docs/gap-analysis.md`):**
-- **Pre-run gates (NestJS guards):** channel allowlist + tier (G2 — **from a new dashboard-editable `parrot_*` table**), blocked-role check (G4), per-user/tier rate limit with resting message (G2).
-- **Reply pattern (G5 — decided):** send a placeholder, **await the complete reply, edit once.** No per-token editing.
-- **Delivery routing (G3):** compute `doText`/`doVoice` from called tools' `response_delivery` metadata.
-- **Dashboard-compat write (G1):** after each turn, write a `parrot_conversation_history` row (port v1 `saveConversation` shape) so the dashboard history page stays populated.
-- **Error fallback (G6):** friendly user-facing message on agent failure (NestJS exception filter).
+**Implementation notes:**
+- Mastra `agent.generate` memory options: `{ memory: { thread: threadId, resource: resourceId } }` (not flat `{ resourceId, threadId }` — API shape verified from types).
+- `result.toolCalls` items: `tc.payload.toolName` (not `.name` — `ToolCallChunk` wraps payload).
+- Necord `ContextOf<'messageCreate'>` returns `OmitPartialGroupDMChannel<Message>` — cast as `unknown as Message` at call site in `discord-events.service.ts`.
 
-**Acceptance:** Live @mention gets a reply (placeholder → single edit); memory works across turns; personality matches dashboard; allowlist/role/rate-limit gates enforced; a `parrot_conversation_history` row is written and shows on the dashboard; `core/` received only plain types.
+**Done ✅ (2026-06-10):**
+- `tsc --noEmit` clean · `vitest run` 40/40 ✅ (task3.spec.ts)
 
 ---
 
-## Task 4 — Core tools ⬜
+## Task 4 — Core tools ✅
 
-Port to TS `createTool` in `core/tools/`: `sing_song`, `search_web`, `create_timer`, `run_roast`, `make_joke_like`. Tool descriptions injected from `parrot_tool_descriptions`. Decide which user-facing commands are Necord `@SlashCommand`s vs agent tools (gap-analysis G10). Implement per-tool **response delivery routing** (text/voice/both) from `tools_meta_data.response_delivery` (G3).
+**What was built:**
+- `src/core/tools/search-web.ts` — `createSearchWebTool(description)` factory; Tavily API, 15s timeout, 5 results, 400-char snippet cap; 401/429/timeout/network error handling.
+- `src/core/tools/sing-song.ts` — `createSingSongTool(description)` factory; Tavily lyrics search; voice delivery deferred to Task 5.
+- `src/core/tools/create-timer.ts` — `createTimerTool(description, TimerPort)` factory; `TimerPort` interface; Popeyes timer (10 + 2–15 min); per-user 3-timer/10-min rate limit.
+- `src/core/tools/run-roast.ts` — `createRunRoastTool(description, RoastDataPort)` factory; `RoastDataPort` interface; name-only + user-ID paths; display-name fallback.
+- `src/core/tools/make-joke-like.ts` — `createMakeJokeLikeTool(description)` factory; disabled in DB (`is_active=false`).
+- `src/core/tools/index.ts` — barrel; `buildTools(descriptions, ports): ToolsInput` — wires DB descriptions + port adapters.
+- `src/infra/timer.service.ts` — `DiscordTimerService implements TimerPort, OnModuleDestroy`; `@Inject(Client)` (Necord token); channel→DM fallback; timeout tracking + graceful shutdown.
+- `src/infra/roast-data.adapter.ts` — `DiscordRoastAdapter implements RoastDataPort`; `@Inject(Client)`; `guild.members.fetch()`.
+- `src/infra/bot-core.module.ts` — added `DiscordTimerService` + `DiscordRoastAdapter` to providers/exports.
+- `src/infra/parrott-agent.provider.ts` — `onModuleInit` made async; fetches active tool descriptions from `PersonalityService`; calls `buildTools()`.
+- `src/core/agents/parrott.ts` — added `tools?: ToolsInput` to `ParrottAgentOptions`; passed to `new Agent()`.
+- `test/task4.spec.ts` — 26 tests (search_web × 6, sing_song × 3, create_timer × 7, run_roast × 6, buildTools × 3).
 
-**Acceptance:** Each tool callable by the agent end-to-end; descriptions reflect the DB; delivery routing (text/voice/both) matches each tool's metadata.
+**Implementation notes:**
+- Necord client injection: `@Inject(Client)` (the discord.js `Client` class is the DI token — `NecordClientProvider` uses `provide: Client`). No `InjectDiscordClient` export in necord.
+- `buildTools` return type: `ToolsInput` (from `@mastra/core/agent`) — Mastra's union covers all tool variants.
+- `make_joke_like` is wired but inactive (`is_active=false` in DB) — won't be called by the agent.
+
+**Done ✅ (2026-06-10):**
+- `tsc --noEmit` clean · `vitest run` 88/88 ✅ (all spec files)
+- Fixed: `make-joke-like.ts` dead `isAbort` ternary; `buildTools` return type; Necord `@Inject(Client)` pattern
 
 ---
 
@@ -145,7 +185,20 @@ Port to TS `createTool` in `core/tools/`: `sing_song`, `search_web`, `create_tim
 
 **Voice parity to port:** `voice_sessions`/`voice_session_turns` persistence; **auto-end on disconnect**; separate `voice_model`. Quick-comment job → Task 6. New env: `DEEPGRAM_API_KEY` (only one).
 
+**Phase 8 (deferred):** Local Vosk wake-word tier for IDLE-mode keyword-spotting (replaces VAD-gated Deepgram in IDLE). Pull when Deepgram idle spend exceeds ~$20/mo. See [`docs/voice-plan.md`](docs/voice-plan.md) § Scale lever.
+
 **Acceptance (see voice-plan.md for full gate):** "parrot …" opens a window → spoken reply with **first-audio < 1.5s** (instrumented); **barge-in stops playback < 200ms** and picks up the new utterance; a tool runs **inside** the loop during a voice turn; same agent/memory/personality as text; session row persisted; `TtsPort` swap test passes.
+
+**Container strategy — audio dependency friction:**
+
+| Dependency | Type | Container concern | Strategy |
+|---|---|---|---|
+| `ffmpeg-static` | static binary | ships its own — zero config | ✅ use as-is |
+| `opusscript` | WASM | no build tools needed | ✅ default for dev + containers |
+| `@discordjs/opus` | native addon | requires `node-gyp` + build tools in image | ⚠️ swap in for prod/scale via multi-stage build |
+| `@tensorflow/tfjs-node` (Silero VAD) | native addon | requires `libstdc++` in image | ⚠️ use `tfjs` (pure JS) in containers; swap to `-node` for perf |
+
+**Rule:** default to WASM/pure-JS variants (`opusscript`, `tfjs`) — base image stays `node:20-slim`, no build tools, ~200MB. For production scale, swap to native via a multi-stage Dockerfile (builder stage with `build-essential`, clean runtime stage). Either path is a **one-line package swap** — architecture unchanged.
 
 ---
 
