@@ -5,7 +5,7 @@
  *   - PostgresStore  → conversation + working memory
  *   - PgVector       → semantic recall (embeddings)
  *
- * Scope helpers are in ./scope.ts (importable without DATABASE_URL for tests).
+ * Scope helpers are in ./memory-scope.ts (importable without DATABASE_URL for tests).
  *
  * Boundary rule: no @nestjs/*, discord.js, or necord imports.
  */
@@ -14,7 +14,7 @@ import { Memory } from '@mastra/memory';
 import { PostgresStore, PgVector } from '@mastra/pg';
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 
-export { buildMemoryScope } from './scope.js';
+export { buildMemoryScope } from './memory-scope.js';
 
 // Supabase pooler TLS — cert not in Node trust store (see memory-plan.md § SSL fix)
 const pgPoolOptions = { ssl: { rejectUnauthorized: false } };

@@ -21,7 +21,7 @@ import { SUPABASE_CLIENT } from '../../infra/supabase/supabase.module.js';
 import { AllowlistService, type ChannelTier } from '../../infra/allowlist.service.js';
 import { RateLimitService } from '../../infra/rate-limit.service.js';
 import { ParrottAgentProvider, guildContext } from '../../infra/parrott-agent.provider.js';
-import { buildMemoryScope } from '../../core/memory/scope.js';
+import { buildMemoryScope } from '../../core/memory/memory-scope.js';
 
 // ── Blocked-role config ───────────────────────────────────────────────────────
 

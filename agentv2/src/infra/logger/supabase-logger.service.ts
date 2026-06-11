@@ -1,5 +1,5 @@
 import { ConsoleLogger, LogLevel } from '@nestjs/common';
-import { getSupabaseAdmin } from '../supabase/client.js';
+import { getSupabaseAdmin } from '../supabase/supabase.client.js';
 
 /**
  * Custom NestJS logger that writes to both stdout AND the Supabase `logs` table.

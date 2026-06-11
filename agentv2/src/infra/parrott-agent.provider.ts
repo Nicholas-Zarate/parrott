@@ -25,8 +25,8 @@ import { createParrottAgent } from '../core/agents/parrott.js';
 import { buildTools } from '../core/tools/index.js';
 import { PersonalityService } from './personality.service.js';
 import { FeatureFlagService } from './feature-flags.service.js';
-import { DiscordTimerService } from './timer.service.js';
-import { DiscordRoastAdapter } from './roast-data.adapter.js';
+import { DiscordTimerService } from './discord-timer.service.js';
+import { DiscordRoastAdapter } from './discord-roast.adapter.js';
 
 /**
  * Propagates the active guild_id through the async call stack so the
