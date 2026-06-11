@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SupabaseModule } from './infra/supabase/supabase.module.js';
+import { BotCoreModule } from './infra/bot-core.module.js';
 import { DiscordModule } from './platforms/discord/discord.module.js';
 
 @Module({
@@ -9,11 +10,15 @@ import { DiscordModule } from './platforms/discord/discord.module.js';
     // Load .env and make ConfigService available globally
     ConfigModule.forRoot({ isGlobal: true }),
 
-    // @nestjs/schedule — cron jobs (announcements, voice-quick-comment) in Task 6
+    // @nestjs/schedule — cron jobs in Task 6
     ScheduleModule.forRoot(),
 
-    // Supabase client — global, injected by token SUPABASE_CLIENT
+    // Supabase client — @Global, injected by SUPABASE_CLIENT token
     SupabaseModule,
+
+    // Shared services — @Global: PersonalityService, FeatureFlagService,
+    // ParrottAgentProvider, AllowlistService, RateLimitService
+    BotCoreModule,
 
     // Discord gateway via Necord
     DiscordModule,
