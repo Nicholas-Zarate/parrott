@@ -1,0 +1,102 @@
+/**
+ * ParrottAgentProvider — NestJS singleton that owns the Mastra Agent instance.
+ *
+ * Creates the agent once at module init. The instructions and model closures
+ * call PersonalityService, which caches DB results for 45s — so personality/model
+ * changes reach the bot within the cache window without a restart.
+ *
+ * Consumers inject this provider and call getAgent() to run turns.
+ *
+ * Usage (in mention adapter — Task 3):
+ *   const agent = this.agentProvider.getAgent();
+ *   const { threadId, resourceId } = buildMemoryScope(channelId, userId);
+ *   const result = await agent.generate(messages, { resourceId, threadId });
+ */
+
+import {
+  Injectable,
+  OnModuleInit,
+  Logger,
+} from '@nestjs/common';
+import { AsyncLocalStorage } from 'async_hooks';
+import type { Agent } from '@mastra/core/agent';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
+import { createParrottAgent } from '../core/agents/parrott.js';
+import { buildTools } from '../core/tools/index.js';
+import { PersonalityService } from './personality.service.js';
+import { FeatureFlagService } from './feature-flags.service.js';
+import { DiscordTimerService } from './timer.service.js';
+import { DiscordRoastAdapter } from './roast-data.adapter.js';
+
+/**
+ * Propagates the active guild_id through the async call stack so the
+ * instructions and model closures can resolve guild-specific config
+ * without changing the agent.generate() API.
+ *
+ * Usage in MentionService:
+ *   await guildContext.run(guildId, () => agent.generate(...))
+ *
+ * Usage in closures:
+ *   const guildId = guildContext.getStore() ?? 'default';
+ */
+export const guildContext = new AsyncLocalStorage<string>();
+
+@Injectable()
+export class ParrottAgentProvider implements OnModuleInit {
+  private readonly logger = new Logger(ParrottAgentProvider.name);
+  private agent!: Agent;
+
+  constructor(
+    private readonly personality: PersonalityService,
+    private readonly flags: FeatureFlagService,
+    private readonly timerService: DiscordTimerService,
+    private readonly roastAdapter: DiscordRoastAdapter,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    // Build tools with live descriptions from DB
+    const descriptions = await this.personality.getActiveToolDescriptions();
+    const tools = buildTools(descriptions, {
+      timer: this.timerService,
+      roastData: this.roastAdapter,
+    });
+
+    this.agent = createParrottAgent({
+      // Resolved per-turn. guildContext carries the active guild_id so each
+      // guild gets its own personality without separate agent instances.
+      instructions: () => {
+        const guildId = guildContext.getStore() ?? 'default';
+        return this.personality.getSystemPrompt('text', guildId);
+      },
+
+      model: async () => {
+        const guildId = guildContext.getStore() ?? 'default';
+        const modelId = await this.personality.getModel(guildId);
+        return new ModelRouterLanguageModel(modelId);
+      },
+
+      tools,
+    });
+
+    this.logger.log(`Parrott Mastra agent initialised with ${Object.keys(tools).length} tools`);
+  }
+
+  /**
+   * Returns the singleton Agent instance.
+   * Callers pass { resourceId, threadId } to agent.generate() / agent.stream()
+   * to wire memory correctly.
+   *
+   * Memory is gated on capability.memory flag in the mention adapter (Task 3).
+   */
+  getAgent(): Agent {
+    return this.agent;
+  }
+
+  /**
+   * Is the memory feature live for this guild?
+   * Used by the mention adapter to decide whether to pass memory IDs.
+   */
+  isMemoryLive(guildId = 'default'): boolean {
+    return this.flags.isLive('capability.memory', guildId);
+  }
+}
