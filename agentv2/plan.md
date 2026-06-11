@@ -179,11 +179,22 @@ Scaffold the real app per [`CLAUDE.md`](CLAUDE.md) § Folder structure: NestJS a
 
 `platforms/discord/voice/` (streaming orchestrator + Discord receiver→PCM ingest + Opus encode→player, on the Necord-managed client) + `infra/` STT/TTS/VAD/wake-word adapters. Implements `VoiceSink` + new ports `SttPort`/`TtsPort`/`VadPort`/`WakeWordPort`. `join_voice` Discord-only tool.
 
-**Pipeline:** continuous Opus→16k PCM → **Silero VAD** (gates IDLE STT — regex "parrot" to open the window; no separate wake-word vendor) → **Deepgram** streaming STT (endpointing) → **`agent.stream()`** (tools + memory + personality) → **sentence chunker** → **ElevenLabs Flash ws** TTS → Opus → player. **Wake-word-then-open ~30s window** (open-mic inside, engaged-speaker lock). **Barge-in:** VAD during SPEAKING → `player.stop()` + abort stream + flush TTS < 200ms. Replaces v1's `processingTurn` boolean with a `IDLE→LISTENING→THINKING→SPEAKING` state machine. Reuse v1's Opus→PCM **decode** learnings (`../docs/voice-pipeline-findings-and-changes.md`); **drop** the per-turn disk+ffmpeg+batch-Whisper path.
+**Pipeline:** continuous Opus→16k PCM → **Silero VAD** (gates IDLE STT — regex "parrot" to open the window; no separate wake-word vendor) → **Deepgram** streaming STT (endpointing) → **`agent.stream()`** (tools + memory + personality) → **sentence chunker** → **TTS (see below)** → Opus → player. **Wake-word-then-open ~30s window** (open-mic inside, engaged-speaker lock). **Barge-in:** VAD during SPEAKING → `player.stop()` + abort stream + flush TTS < 200ms. Replaces v1's `processingTurn` boolean with a `IDLE→LISTENING→THINKING→SPEAKING` state machine. Reuse v1's Opus→PCM **decode** learnings (`../docs/voice-pipeline-findings-and-changes.md`); **drop** the per-turn disk+ffmpeg+batch-Whisper path.
+
+**TTS — dual implementation, feature-flag switched:**
+
+Two `TtsPort` implementations are built; the active one is selected at runtime via `capability.tts.elevenlabs` feature flag (existing `FeatureFlagService`, per-guild):
+
+| Flag state | Provider | Behaviour |
+|---|---|---|
+| off (default) | `OpenAiTtsService` | Batch audio blob — one chunk yielded. ~300-500ms extra latency. No subscription needed. |
+| live | `ElevenLabsFlashService` | WebSocket streaming — audio chunks yielded progressively. First-audio < 1.5s target. Requires paid ElevenLabs plan. |
+
+`TtsPort` is defined as `AsyncIterable<Buffer>` so both providers are drop-in: OpenAI yields one large chunk, ElevenLabs yields many small ones. The sentence chunker → Opus encoder pipeline is identical for both. Swap is zero-restart (flag TTL = 45s). New env needed only when flag is enabled: `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`.
 
 **Locked decisions (see voice-plan.md § Locked decisions — do not re-litigate):** STT = **Deepgram Nova-3**; wake word = **VAD-gated Deepgram + "parrot" regex** (Silero VAD gates IDLE STT — no Porcupine/extra vendor); voice memory = **shared Mastra thread** (same `thread`/`resource` as text — resolves G12) **+** `voice_sessions`/`voice_session_turns` rows; barge-in = **engaged speaker only**.
 
-**Voice parity to port:** `voice_sessions`/`voice_session_turns` persistence; **auto-end on disconnect**; separate `voice_model`. Quick-comment job → Task 6. New env: `DEEPGRAM_API_KEY` (only one).
+**Voice parity to port:** `voice_sessions`/`voice_session_turns` persistence; **auto-end on disconnect**; separate `voice_model`. Quick-comment job → Task 6. New env: `DEEPGRAM_API_KEY` + `OPENAI_API_KEY` (TTS). ElevenLabs keys only needed when flag enabled.
 
 **Phase 8 (deferred):** Local Vosk wake-word tier for IDLE-mode keyword-spotting (replaces VAD-gated Deepgram in IDLE). Pull when Deepgram idle spend exceeds ~$20/mo. See [`docs/voice-plan.md`](docs/voice-plan.md) § Scale lever.
 
