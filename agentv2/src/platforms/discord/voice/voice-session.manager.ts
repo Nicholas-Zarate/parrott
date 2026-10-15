@@ -17,6 +17,8 @@ import {
 } from '@nestjs/common';
 import {
   joinVoiceChannel,
+  VoiceConnectionStatus,
+  entersState,
   type VoiceConnection,
 } from '@discordjs/voice';
 import { Client, type Guild, type VoiceChannel, type StageChannel } from 'discord.js';
@@ -79,6 +81,28 @@ export class VoiceSessionManager implements OnModuleInit, OnModuleDestroy {
       selfMute: false,
     });
 
+    // Wait for the connection to be ready before starting the session.
+    // Catches permission errors and network failures early.
+    try {
+      await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+    } catch {
+      connection.destroy();
+      throw new Error(`Could not connect to #${channel.name} within 10s — check permissions and network.`);
+    }
+
+    // Auto-destroy session if the bot is kicked or the connection drops.
+    connection.on(VoiceConnectionStatus.Disconnected, async () => {
+      try {
+        // Give Discord 5s to auto-reconnect (e.g. region change) before destroying.
+        await entersState(connection, VoiceConnectionStatus.Ready, 5_000);
+        this.logger.log(`[VoiceMgr] reconnected in guild=${guildId}`);
+      } catch {
+        this.logger.log(`[VoiceMgr] disconnected (no reconnect) guild=${guildId} — destroying session`);
+        const session = this.sessions.get(guildId);
+        if (session) await session.destroy('disconnect');
+      }
+    });
+
     const agent = this.agentProvider.getAgent();
     const useMemory = this.agentProvider.isMemoryLive(guildId);
 
@@ -98,6 +122,7 @@ export class VoiceSessionManager implements OnModuleInit, OnModuleDestroy {
 
     this.sessions.set(guildId, session);
     session.start();
+    void session.greet();
 
     this.logger.log(`[VoiceMgr] joined #${channel.name} in guild=${guildId}`);
     return session;

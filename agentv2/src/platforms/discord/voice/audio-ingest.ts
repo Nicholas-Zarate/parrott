@@ -11,7 +11,10 @@
  */
 
 import { EndBehaviorType, type VoiceReceiver } from '@discordjs/voice';
+import { Logger } from '@nestjs/common';
 import OpusScript from 'opusscript';
+
+const logger = new Logger('AudioIngest');
 
 export type FrameCallback = (userId: string, frame: Buffer) => void;
 
@@ -36,17 +39,27 @@ export function attachIngest(
   const activeStreams = new Map<string, () => void>();
 
   const onSpeakingStart = (userId: string) => {
-    if (activeStreams.has(userId)) return; // already subscribed
+    logger.log(`[Ingest] speaking start userId=${userId}`);
+    if (activeStreams.has(userId)) {
+      logger.debug(`[Ingest] already subscribed userId=${userId}`);
+      return;
+    }
 
     const stream = receiver.subscribe(userId, {
       end: { behavior: EndBehaviorType.Manual },
     });
+    logger.log(`[Ingest] subscribed to audio stream userId=${userId}`);
 
     // opusscript: Application.VOIP is correct for Discord voice
     const opus = new OpusScript(DISCORD_SAMPLE_RATE, CHANNELS, OpusScript.Application.VOIP);
     let remainder = Buffer.alloc(0);
 
+    let frameCount = 0;
     const onData = (opusFrame: Buffer) => {
+      frameCount++;
+      if (frameCount === 1 || frameCount % 100 === 0) {
+        logger.log(`[Ingest] frames received userId=${userId} count=${frameCount}`);
+      }
       try {
         // Decode Opus → 48kHz stereo 16-bit PCM
         const pcm48k = opus.decode(opusFrame) as Buffer;
@@ -80,6 +93,7 @@ export function attachIngest(
 
     stream.on('data', onData);
     stream.once('end', () => {
+      logger.log(`[Ingest] stream ended userId=${userId} totalFrames=${frameCount}`);
       opus.delete();
       activeStreams.delete(userId);
     });

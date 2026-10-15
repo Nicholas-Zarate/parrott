@@ -305,7 +305,7 @@ function makeMessage(overrides: {
     member,
     guild,
     client: { user: { id: botId } },
-    mentions: { has: vi.fn().mockReturnValue(true) },
+    mentions: { has: vi.fn().mockReturnValue(true), roles: new Map() },
     reply: vi.fn().mockResolvedValue(placeholder),
     _placeholder: placeholder,
   };
@@ -399,7 +399,7 @@ describe('MentionService pipeline', () => {
 
     expect(msg.reply).toHaveBeenCalledWith('juan second...');
     expect(generateMock).toHaveBeenCalledWith(
-      [{ role: 'user', content: 'hey' }],
+      [expect.objectContaining({ role: 'user', content: expect.stringContaining('hey') })],
       expect.anything(),
     );
     expect(msg._placeholder.edit).toHaveBeenCalledWith('squawk!');

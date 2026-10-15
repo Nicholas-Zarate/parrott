@@ -17,7 +17,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import type { VadPort, VadResult } from '../../core/ports/vad.port.js';
 
 /** RMS amplitude above which a frame is considered speech. Tune via env. */
-const SPEECH_RMS_THRESHOLD = parseInt(process.env['VAD_SPEECH_RMS_THRESHOLD'] ?? '800', 10);
+const SPEECH_RMS_THRESHOLD = parseInt(process.env['VAD_SPEECH_RMS_THRESHOLD'] ?? '200', 10);
 
 /** Smoothing: fraction of past state to carry forward (0 = no smoothing). */
 const SMOOTHING = 0.3;

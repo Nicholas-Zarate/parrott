@@ -24,12 +24,14 @@ import type { TtsPort } from '../../../core/ports/tts.port.js';
 import { guildContext } from '../../../infra/parrott-agent.provider.js';
 import { buildMemoryScope } from '../../../core/memory/memory-scope.js';
 import { attachIngest } from './audio-ingest.js';
-import { playTts } from './audio-output.js';
+import { playTts, playTtsStream } from './audio-output.js';
 import { sentenceChunker } from './sentence-chunker.js';
 
 export type VoiceState = 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING';
 
-const WAKE_REGEX = /\bparr?o[t]?t?\b/i;
+// Covers parrot, parrott, perrott, perry — Deepgram mishears the bot name in several ways.
+// Keyword boosting in deepgram-stt.service.ts is the primary fix; this regex is the fallback.
+const WAKE_REGEX = /\bp(?:arr?o[t]?t?|errott?|erry)\b/i;
 const WINDOW_TIMEOUT_MS = 30_000;
 const BARGE_IN_SPEECH_PROB = 0.6; // slightly higher than VAD threshold to reduce false positives
 
@@ -59,6 +61,10 @@ export class VoiceSession {
   private abortController: AbortController | null = null;
   private sttConnection: SttConnection | null = null;
   private cleanupIngest: (() => void) | null = null;
+  private sttReconnectAttempts = 0;
+  private sttGeneration = 0; // incremented on each openSttConnection — stale consumers skip reconnect
+  private destroyed = false;
+  private lastPartialText = ''; // fallback for utteranceEnd when final hasn't arrived yet
 
   private readonly player = createAudioPlayer();
   private readonly connection: VoiceConnection;
@@ -94,11 +100,24 @@ export class VoiceSession {
       this.connection.receiver,
       (userId, frame) => void this.onFrame(userId, frame),
     );
-    this.logger.log(`[Voice] session started guild=${this.guildId} channel=${this.channelId}`);
+    this.logger.log(`[Voice] session started guild=${this.guildId} channel=${this.channelId} — waiting for wake word "parrot"`);
+  }
+
+  /** Play a short join greeting via TTS. Fire-and-forget from the manager. */
+  async greet(): Promise<void> {
+    const greeting = "Squawk! I'm in. Say \"parrot\" to wake me up.";
+    const tts = this.resolveTts();
+    const ac = new AbortController();
+    try {
+      await playTts(greeting, tts, this.player, ac.signal);
+    } catch (err) {
+      this.logger.warn(`[Voice] greeting TTS failed: ${String(err)}`);
+    }
   }
 
   /** Tear down everything — called by manager on disconnect or shutdown. */
   async destroy(reason: 'disconnect' | 'leave_command' | 'shutdown' = 'disconnect'): Promise<void> {
+    this.destroyed = true; // must be set before closing STT to prevent reconnect loop
     this.clearWindowTimer();
     this.cleanupIngest?.();
     this.abortController?.abort();
@@ -119,14 +138,28 @@ export class VoiceSession {
       case 'IDLE':
         // Feed all speech frames to STT for wake-word detection
         if (isSpeech && this.sttConnection) {
-          this.sttConnection.send(frame);
+          try { this.sttConnection.send(frame); } catch (err) {
+            this.logger.debug(`[Voice] STT send failed (IDLE): ${String(err)}`);
+          }
         }
         break;
 
       case 'LISTENING':
+        // Auto-engage the first *speaking* user after wake word (VAD-gated so a
+        // silence frame from a bystander doesn't claim the engaged slot).
+        if (this.engagedUserId === null) {
+          if (!isSpeech) return;
+          this.engagedUserId = userId;
+          this.logger.log(`[Voice] engaged speaker set: ${userId}`);
+        }
         if (userId !== this.engagedUserId) return;
-        if (isSpeech && this.sttConnection) {
-          this.sttConnection.send(frame);
+        // Send ALL frames (speech + silence) once engaged — Deepgram needs the
+        // silence frames (DTX from Discord) to count utterance_end_ms and fire
+        // is_final. VAD-gating post-engagement would suppress that signal.
+        if (this.sttConnection) {
+          try { this.sttConnection.send(frame); } catch (err) {
+            this.logger.debug(`[Voice] STT send failed (LISTENING): ${String(err)}`);
+          }
         }
         break;
 
@@ -149,29 +182,63 @@ export class VoiceSession {
   private openSttConnection(): void {
     this.sttConnection?.close().catch(() => null);
     this.sttConnection = this.stt.connect();
+    this.sttGeneration++;
+    this.logger.log(`[Voice] STT connection opened (state=${this.state} gen=${this.sttGeneration})`);
 
     // Consume events in background
-    void this.consumeSttEvents();
+    void this.consumeSttEvents(this.sttGeneration);
   }
 
-  private async consumeSttEvents(): Promise<void> {
+  private async consumeSttEvents(generation: number): Promise<void> {
     if (!this.sttConnection) return;
     try {
       for await (const event of this.sttConnection.events()) {
-        if (event.type === 'final' && event.text) {
+        // Stop consuming if a newer connection has been opened (stale connection)
+        if (generation !== this.sttGeneration) break;
+        // Skip empty events unless it's an utteranceEnd (which always has empty text)
+        if (!event.text && event.type !== 'utteranceEnd') continue;
+
+        if (event.type === 'final') {
+          this.lastPartialText = ''; // clear partial; final is authoritative
           this.onTranscriptFinal(event.text);
-        } else if (event.type === 'utteranceEnd' && this.state === 'LISTENING') {
-          // utteranceEnd with no more text = end of turn → run agent
-          // (onTranscriptFinal handles the actual utterance text)
+        } else if (event.type === 'partial' && this.state === 'IDLE') {
+          // Use partials for wake-word detection — finals take ~1s of post-speech silence.
+          // Safe: onTranscriptFinal transitions state to LISTENING on first match,
+          // so subsequent partials no longer satisfy state === 'IDLE'.
+          this.onTranscriptFinal(event.text);
+        } else if (event.type === 'partial' && this.state === 'LISTENING') {
+          this.lastPartialText = event.text; // accumulate for utteranceEnd fallback
+          this.logger.log(`[Voice] partial [LISTENING]: "${event.text.slice(0, 80)}"`);
+        } else if (event.type === 'utteranceEnd' && this.state === 'LISTENING' && this.lastPartialText) {
+          // Fallback: connection dropped before is_final arrived — fire agent on last partial.
+          this.logger.log(`[Voice] utteranceEnd fallback → runAgent on partial: "${this.lastPartialText.slice(0, 60)}"`);
+          const text = this.lastPartialText;
+          this.lastPartialText = '';
+          this.onTranscriptFinal(text);
         }
       }
     } catch (err) {
       this.logger.debug(`[Voice] STT event stream ended: ${String(err)}`);
     }
+
+    // If this is a stale consumer (newer connection already opened), do not reconnect.
+    if (generation !== this.sttGeneration) return;
+
+    // Session is being torn down — do not reconnect.
+    if (this.destroyed) return;
+
+    // If still active, reconnect with backoff
+    if (this.state === 'IDLE' || this.state === 'LISTENING') {
+      const delay = Math.min(1_000 * 2 ** this.sttReconnectAttempts, 30_000);
+      this.sttReconnectAttempts++;
+      this.logger.log(`[Voice] STT connection lost — reconnecting in ${delay}ms (attempt ${this.sttReconnectAttempts})`);
+      setTimeout(() => this.openSttConnection(), delay);
+    }
   }
 
   private onTranscriptFinal(text: string): void {
-    this.logger.debug(`[Voice] transcript [${this.state}]: "${text}"`);
+    this.sttReconnectAttempts = 0; // connection proved healthy
+    this.logger.log(`[Voice] transcript [${this.state}]: "${text}"`);
 
     if (this.state === 'IDLE') {
       if (WAKE_REGEX.test(text)) {
@@ -188,10 +255,18 @@ export class VoiceSession {
   }
 
   private transitionToListening(userId: string | null): void {
+    const wasIdle = this.state === 'IDLE';
     this.state = 'LISTENING';
     this.engagedUserId = userId;
+    this.lastPartialText = '';
+    this.sttReconnectAttempts = 0; // fresh window, reset backoff
     this.resetWindowTimer();
-    this.openSttConnection(); // fresh connection for the conversational window
+    if (!wasIdle) {
+      // Coming from SPEAKING/THINKING — open a fresh STT connection.
+      // When coming from IDLE (wake word), keep the existing connection so the
+      // question audio that overlapped with the wake word isn't split/dropped.
+      this.openSttConnection();
+    }
     this.logger.log(`[Voice] → LISTENING (engaged=${userId ?? 'next-speaker'})`);
   }
 
@@ -223,7 +298,7 @@ export class VoiceSession {
       // Resolve active TTS provider for this turn (honours live feature-flag swap).
       const tts = this.resolveTts();
 
-      // Stream tokens → sentence chunks → TTS → Discord player
+      // Stream tokens → sentence chunks → TTS → Discord player (one continuous stream)
       let fullResponse = '';
       let firstAudioMs: number | null = null;
 
@@ -235,14 +310,12 @@ export class VoiceSession {
         }
       })();
 
-      for await (const sentence of sentenceChunker(tokenStream)) {
-        if (signal.aborted) break;
-
-        const firstAudioAt = await playTts(sentence, tts, this.player, signal);
-        if (firstAudioAt !== null && firstAudioMs === null) {
-          firstAudioMs = firstAudioAt - startMs;
-          this.logger.log(`[Voice] first-audio ${firstAudioMs}ms after user stopped`);
-        }
+      // playTtsStream pipes all sentence chunks into a single AudioResource so the
+      // Discord player never stops/restarts between sentences (no audible gaps).
+      const firstAudioAt = await playTtsStream(sentenceChunker(tokenStream), tts, this.player, signal);
+      if (firstAudioAt !== null) {
+        firstAudioMs = firstAudioAt - startMs;
+        this.logger.log(`[Voice] first-audio ${firstAudioMs}ms after user stopped`);
       }
 
       const interrupted = signal.aborted;

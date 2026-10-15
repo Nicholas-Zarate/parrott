@@ -32,8 +32,10 @@ export class DeepgramSttService implements SttPort {
       channels: 1,
       punctuate: true,
       interim_results: true,
-      utterance_end_ms: 1000, // 1s of silence → utterance end
+      utterance_end_ms: 1000,  // word-timing gap → UtteranceEnd event (fallback)
+      endpointing: 300,         // audio silence → speech_final=true (primary trigger)
       vad_events: true,
+      keyterms: ['parrot', 'parrott'], // Nova-3 vocabulary boost (Nova-2 uses 'keywords')
     });
 
     // Push-based event queue → async iterable bridge
@@ -59,33 +61,62 @@ export class DeepgramSttService implements SttPort {
       }
     };
 
+    // Accumulate is_final phrases until speech_final=true marks the utterance boundary.
+    // Multiple is_final=true events can arrive for one utterance (phrase-level finals).
+    // speech_final=true (fired by endpointing after 300ms silence) is the real boundary.
+    let finalBuffer = '';
+
     connection.on(LiveTranscriptionEvents.Transcript, (data) => {
       const alt = data?.channel?.alternatives?.[0];
       const text: string = alt?.transcript ?? '';
+      this.logger.log(`[STT/Deepgram] transcript event: is_final=${String(data?.is_final)} speech_final=${String(data?.speech_final)} text="${text}"`);
+
       if (!text) return;
 
-      if (data.is_final) {
-        enqueue({ type: 'final', text });
-      } else {
+      if (!data.is_final) {
+        // Interim partial — emit for wake-word detection in IDLE and UX feedback in LISTENING
         enqueue({ type: 'partial', text });
+        return;
       }
 
-      // speech_final = Deepgram's own utterance boundary (in addition to UtteranceEnd)
+      // is_final=true: accumulate into buffer
+      finalBuffer = finalBuffer ? `${finalBuffer} ${text}` : text;
+
       if (data.speech_final) {
+        // Utterance boundary — emit accumulated transcript and clear buffer
+        const utterance = finalBuffer;
+        finalBuffer = '';
+        enqueue({ type: 'final', text: utterance });
         enqueue({ type: 'utteranceEnd', text: '' });
       }
+      // else: more phrases expected — keep accumulating
     });
 
     connection.on(LiveTranscriptionEvents.UtteranceEnd, () => {
       enqueue({ type: 'utteranceEnd', text: '' });
     });
 
+    // Send keepalive every 8s so Deepgram doesn't close the connection during silence gaps.
+    const keepAliveTimer = setInterval(() => {
+      if (!done) {
+        try { connection.keepAlive(); } catch { /* ignore if already closed */ }
+      }
+    }, 8_000);
+
+    connection.on(LiveTranscriptionEvents.Open, () => {
+      this.logger.log(`[STT/Deepgram] connection open (model=${model})`);
+    });
+
     connection.on(LiveTranscriptionEvents.Error, (err) => {
-      this.logger.error(`[STT/Deepgram] error: ${String(err)}`);
+      const msg = (err as { message?: string })?.message ?? JSON.stringify(err);
+      this.logger.error(`[STT/Deepgram] error: ${msg}`);
+      clearInterval(keepAliveTimer);
       complete();
     });
 
     connection.on(LiveTranscriptionEvents.Close, () => {
+      this.logger.log('[STT/Deepgram] connection closed');
+      clearInterval(keepAliveTimer);
       complete();
     });
 
@@ -101,8 +132,15 @@ export class DeepgramSttService implements SttPort {
       },
     };
 
+    let sendCount = 0;
+    const logger = this.logger;
+
     return {
       send(frame: Buffer): void {
+        sendCount++;
+        if (sendCount === 1 || sendCount % 25 === 0) {
+          logger.log(`[STT/Deepgram] sent frame #${sendCount} to Deepgram (${frame.byteLength} bytes)`);
+        }
         // Deepgram v3 expects Blob | ArrayBuffer | string — convert Buffer
         connection.send(frame.buffer.slice(frame.byteOffset, frame.byteOffset + frame.byteLength) as ArrayBuffer);
       },

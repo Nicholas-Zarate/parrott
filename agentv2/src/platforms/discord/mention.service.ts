@@ -47,13 +47,17 @@ function hasBlockedRole(member: GuildMember): boolean {
 
 // ── Text extraction ───────────────────────────────────────────────────────────
 
-/** Strip the bot's @mention from the message content. */
+/** Strip the bot's @mention (user or role form) from the message content. */
 function extractText(message: Message): string {
   const clientUserId = message.client.user?.id ?? '';
-  const text = message.content
-    .replace(new RegExp(`<@!?${clientUserId}>`, 'g'), '')
-    .trim();
-  return text || '(no content)';
+  // Strip user mention <@123> / <@!123> and any role mentions <@&roleId>
+  // that triggered this handler (bot's assigned roles).
+  const mentionedRoleIds = [...(message.mentions.roles?.keys() ?? [])];
+  let text = message.content.replace(new RegExp(`<@!?${clientUserId}>`, 'g'), '');
+  for (const roleId of mentionedRoleIds) {
+    text = text.replace(new RegExp(`<@&${roleId}>`, 'g'), '');
+  }
+  return text.trim() || '(no content)';
 }
 
 // ── Resting message ───────────────────────────────────────────────────────────
@@ -137,11 +141,16 @@ export class MentionService implements OnModuleDestroy {
       const useMemory = this.agentProvider.isMemoryLive(guildId ?? 'default');
       const { threadId, resourceId } = buildMemoryScope(channelId, author.id);
 
+      // Prepend Discord context so tools (e.g. join_voice) have the IDs they need.
+      // LLMs don't know guild/user IDs from the message text alone.
+      const contextLine = `[discord:guild=${guildId ?? ''},user=${author.id},channel=${channelId}]`;
+      const contentWithContext = `${contextLine}\n${text}`;
+
       // guildContext.run() threads guildId into the instructions/model closures
       // so personality and model resolve per-guild without API changes.
       const result = await guildContext.run(guildId ?? 'default', () =>
         agent.generate(
-          [{ role: 'user', content: text }],
+          [{ role: 'user', content: contentWithContext }],
           useMemory ? { memory: { thread: threadId, resource: resourceId } } : {},
         ),
       );

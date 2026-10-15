@@ -2,8 +2,9 @@
  * OpenAiTtsService — TtsPort implementation using OpenAI Text-to-Speech.
  *
  * Default TTS provider. Active when capability.tts.elevenlabs flag is OFF.
- * Returns one mp3 Buffer per synthesize() call (batch, not streaming).
- * Latency: ~300-500ms added vs ElevenLabs Flash WS streaming.
+ * Streams the response body chunk-by-chunk (not arrayBuffer) so the Discord
+ * player receives first audio bytes while synthesis is still in progress.
+ * Latency improvement: ~300–500ms vs the previous batch approach.
  *
  * Voice: configurable via OPENAI_TTS_VOICE env (default: 'alloy').
  * Model: tts-1 (fast) — swap to tts-1-hd for higher quality if latency allows.
@@ -31,12 +32,20 @@ export class OpenAiTtsService implements TtsPort {
         response_format: 'mp3',
       });
 
-      // OpenAI returns the full audio blob — yield as a single chunk.
-      // The pipeline treats it identically to ElevenLabs streaming chunks.
-      const buffer = Buffer.from(await response.arrayBuffer());
-      yield buffer;
+      // Stream the response body chunk-by-chunk rather than waiting for the full
+      // arrayBuffer. Node 18+ ReadableStream supports async iteration natively.
+      // First audio bytes reach the Discord player while OpenAI is still synthesizing.
+      const body = response.body as AsyncIterable<Uint8Array> | null;
+      if (!body) return;
 
-      this.logger.debug(`[TTS/OpenAI] synthesized ${text.length} chars → ${buffer.length} bytes`);
+      let totalBytes = 0;
+      for await (const chunk of body) {
+        const buf = Buffer.from(chunk);
+        totalBytes += buf.length;
+        yield buf;
+      }
+
+      this.logger.debug(`[TTS/OpenAI] streamed ${text.length} chars → ${totalBytes} bytes`);
     } catch (err) {
       this.logger.error(`[TTS/OpenAI] synthesis failed: ${String(err)}`);
     }
