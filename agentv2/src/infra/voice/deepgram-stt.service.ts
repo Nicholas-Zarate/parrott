@@ -22,6 +22,7 @@ export class DeepgramSttService implements SttPort {
   connect(opts?: SttConnectOptions): SttConnection {
     const model = opts?.model ?? DEEPGRAM_MODEL;
     const language = opts?.language ?? 'en-US';
+    const tag = opts?.label ? `[STT/Deepgram ${opts.label}]` : '[STT/Deepgram]';
 
     // Open a Deepgram live transcription websocket
     const connection = this.client.listen.live({
@@ -35,7 +36,8 @@ export class DeepgramSttService implements SttPort {
       utterance_end_ms: 1000,  // word-timing gap → UtteranceEnd event (fallback)
       endpointing: 300,         // audio silence → speech_final=true (primary trigger)
       vad_events: true,
-      keyterms: ['parrot', 'parrott'], // Nova-3 vocabulary boost (Nova-2 uses 'keywords')
+      // Nova-3 vocabulary boost. The SDK option is `keyterm` (singular) — `keyterms` is silently ignored.
+      keyterm: ['parrot', 'parrott'],
     });
 
     // Push-based event queue → async iterable bridge
@@ -69,7 +71,7 @@ export class DeepgramSttService implements SttPort {
     connection.on(LiveTranscriptionEvents.Transcript, (data) => {
       const alt = data?.channel?.alternatives?.[0];
       const text: string = alt?.transcript ?? '';
-      this.logger.log(`[STT/Deepgram] transcript event: is_final=${String(data?.is_final)} speech_final=${String(data?.speech_final)} text="${text}"`);
+      this.logger.log(`${tag} transcript: is_final=${String(data?.is_final)} speech_final=${String(data?.speech_final)} text="${text}"`);
 
       if (!text) return;
 
@@ -104,18 +106,18 @@ export class DeepgramSttService implements SttPort {
     }, 8_000);
 
     connection.on(LiveTranscriptionEvents.Open, () => {
-      this.logger.log(`[STT/Deepgram] connection open (model=${model})`);
+      this.logger.log(`${tag} connection open (model=${model})`);
     });
 
     connection.on(LiveTranscriptionEvents.Error, (err) => {
       const msg = (err as { message?: string })?.message ?? JSON.stringify(err);
-      this.logger.error(`[STT/Deepgram] error: ${msg}`);
+      this.logger.error(`${tag} error: ${msg}`);
       clearInterval(keepAliveTimer);
       complete();
     });
 
     connection.on(LiveTranscriptionEvents.Close, () => {
-      this.logger.log('[STT/Deepgram] connection closed');
+      this.logger.log(`${tag} connection closed`);
       clearInterval(keepAliveTimer);
       complete();
     });
@@ -138,8 +140,8 @@ export class DeepgramSttService implements SttPort {
     return {
       send(frame: Buffer): void {
         sendCount++;
-        if (sendCount === 1 || sendCount % 25 === 0) {
-          logger.log(`[STT/Deepgram] sent frame #${sendCount} to Deepgram (${frame.byteLength} bytes)`);
+        if (sendCount === 1 || sendCount % 100 === 0) {
+          logger.debug(`${tag} sent frame #${sendCount} (${frame.byteLength} bytes)`);
         }
         // Deepgram v3 expects Blob | ArrayBuffer | string — convert Buffer
         connection.send(frame.buffer.slice(frame.byteOffset, frame.byteOffset + frame.byteLength) as ArrayBuffer);

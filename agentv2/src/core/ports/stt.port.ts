@@ -27,6 +27,8 @@ export interface SttConnection {
 export interface SttConnectOptions {
   model?: string;
   language?: string;
+  /** Free-form tag for logs (e.g. the speaker id) when several connections are open. */
+  label?: string;
 }
 
 export interface SttPort {

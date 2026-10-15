@@ -15,6 +15,8 @@ describe('WAKE_REGEX', () => {
     'perro',
     'Perry',
     'Barry, shut up',
+    'Harrod, are you listening?',
+    'Harold say something',
   ])('wakes on "%s"', (text) => {
     expect(WAKE_REGEX.test(text)).toBe(true);
   });
