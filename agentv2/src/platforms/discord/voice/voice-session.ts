@@ -29,9 +29,9 @@ import { sentenceChunker } from './sentence-chunker.js';
 
 export type VoiceState = 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING';
 
-// Covers parrot, parrott, perrott, perry — Deepgram mishears the bot name in several ways.
+// Deepgram mishears "parrot" as perra, parra, perro, perry, barry (seen in live VC).
 // Keyword boosting in deepgram-stt.service.ts is the primary fix; this regex is the fallback.
-const WAKE_REGEX = /\bp(?:arr?o[t]?t?|errott?|erry)\b/i;
+export const WAKE_REGEX = /\b(?:p[ae]rr?[oa]t?t?|perry|barry)\b/i;
 const WINDOW_TIMEOUT_MS = 30_000;
 const BARGE_IN_SPEECH_PROB = 0.6; // slightly higher than VAD threshold to reduce false positives
 
