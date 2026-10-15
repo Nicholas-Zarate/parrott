@@ -79,7 +79,7 @@ export function createJoinVoiceTool(
 
         await manager.join(channel, guild);
         logger.log(`join_voice: joined #${channel.name} successfully`);
-        return { success: true, message: `Joined #${channel.name}! Say "parrot" to wake me up.` };
+        return { success: true, message: `Joined #${channel.name}! Say "hey mister parrot" to wake me up.` };
       } catch (err) {
         logger.error(`join_voice: unexpected error: ${String(err)}`);
         return { success: false, message: `Couldn't join: ${String(err)}` };

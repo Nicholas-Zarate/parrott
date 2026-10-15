@@ -33,9 +33,11 @@ import { sentenceChunker } from './sentence-chunker.js';
 
 export type VoiceState = 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING';
 
-// Deepgram mishears "parrot" as perra, parra, perro, perry, barry, harrod, harold (seen in live VC).
-// Keyterm boosting in deepgram-stt.service.ts is the primary fix; this regex is the fallback.
-export const WAKE_REGEX = /\b(?:p[ae]rr?[oa]t?t?|perry|barry|harrod|harold)\b/i;
+// Wake phrase: "(hey) mister parrot". The "mister" makes the phrase distinctive enough that the
+// last word can stay loose — Deepgram mishears "parrot" as perra, parra, perro, perry, barry,
+// harrod, harold — without a plain name like "Harol" waking the bot.
+export const WAKE_REGEX =
+  /\b(?:hey[,.!]?\s+)?(?:mr\.?|mister)[,.]?\s+(?:p[ae]rr?[oa]t?t?|perry|barry|harrod|harold)\b/i;
 const WINDOW_TIMEOUT_MS = 30_000;
 const BARGE_IN_SPEECH_PROB = 0.6; // slightly higher than VAD threshold to reduce false positives
 // Safety net only — the voice prompt asks for 1–2 sentences; this stops a runaway reply.
@@ -45,7 +47,7 @@ const STT_SWEEP_INTERVAL_MS = 5_000;
 const STT_MAX_BACKOFF_MS = 30_000;
 
 /**
- * Drop everything up to and including the first wake word, so "hey y'all, parrot,
+ * Drop everything up to and including the wake phrase, so "hey y'all, hey mister parrot,
  * what time is it" becomes "what time is it".
  */
 export function stripWakeWord(text: string): string {
@@ -140,12 +142,12 @@ export class VoiceSession {
       (userId, frame) => void this.onFrame(userId, frame),
     );
     this.sweepTimer = setInterval(() => this.sweepIdleStt(), STT_SWEEP_INTERVAL_MS);
-    this.logger.log(`[Voice] session started guild=${this.guildId} channel=${this.channelId} — waiting for wake word "parrot"`);
+    this.logger.log(`[Voice] session started guild=${this.guildId} channel=${this.channelId} — waiting for "hey mister parrot"`);
   }
 
   /** Play a short join greeting via TTS. Fire-and-forget from the manager. */
   async greet(): Promise<void> {
-    const greeting = "Squawk! I'm in. Say \"parrot\" to wake me up.";
+    const greeting = "Squawk! I'm in. Say \"hey mister parrot\" to wake me up.";
     const tts = this.resolveTts();
     const ac = new AbortController();
     try {
@@ -340,8 +342,8 @@ export class VoiceSession {
       this.awaitingFirstUtterance = false;
       utterance = stripWakeWord(text);
       if (!/\w/.test(utterance)) {
-        // Just "parrot" — don't spend a turn answering the wake word; wait for the request.
-        this.logger.log('[Voice] wake word only — waiting for the request');
+        // Just "hey mister parrot" — don't spend a turn answering the wake phrase; wait for the request.
+        this.logger.log('[Voice] wake phrase only — waiting for the request');
         this.awaitingFirstUtterance = true;
         this.resetWindowTimer();
         return;

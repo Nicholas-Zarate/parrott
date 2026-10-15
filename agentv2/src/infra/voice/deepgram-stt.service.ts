@@ -37,7 +37,7 @@ export class DeepgramSttService implements SttPort {
       endpointing: 300,         // audio silence → speech_final=true (primary trigger)
       vad_events: true,
       // Nova-3 vocabulary boost. The SDK option is `keyterm` (singular) — `keyterms` is silently ignored.
-      keyterm: ['parrot', 'parrott'],
+      keyterm: ['mister parrot', 'parrot', 'parrott'],
     });
 
     // Push-based event queue → async iterable bridge

@@ -151,7 +151,7 @@ Tasks 0–4 complete; Task 5 code complete, live VC gates pending. See `plan.md`
 | `OPENAI_API_KEY` | Model Router provider key; also embeddings (`text-embedding-3-small`) + Whisper STT |
 | `ELEVENLABS_API_KEY` | TTS |
 | `ELEVENLABS_VOICE_ID` | Optional — default voice if unset |
-| `DEEPGRAM_API_KEY` | Streaming STT (Deepgram Nova-3) — **Task 5 (voice)**. See [`docs/voice-plan.md`](docs/voice-plan.md). Wake-word = Silero VAD gating Deepgram + "parrot" regex (no separate wake-word vendor). |
+| `DEEPGRAM_API_KEY` | Streaming STT (Deepgram Nova-3) — **Task 5 (voice)**. See [`docs/voice-plan.md`](docs/voice-plan.md). Wake phrase = "hey mister parrot" regex on per-speaker Deepgram streams (VAD-gated; no separate wake-word vendor). |
 
 Note: `DATABASE_URL` (raw Postgres connection for `@mastra/pg`) and `SUPABASE_URL` (REST URL for supabase-js) are two different things — both are needed.
 

@@ -6,47 +6,48 @@ import type { TtsPort } from '../src/core/ports/tts.port.js';
 
 describe('WAKE_REGEX', () => {
   it.each([
-    'parrot',
-    'Parrott',
-    'parot',
-    'perrot',
-    'Hey, Perra. Hop on',
-    'parra',
-    'perro',
-    'Perry',
-    'Barry, shut up',
-    'Harrod, are you listening?',
-    'Harold say something',
+    'hey mr parrot',
+    'Hey, Mister Parrot, what time is it',
+    'hey mr. parrott',
+    'Hey Mr Perra',
+    'mister parrot are you there',
+    'hey mister harold',
+    'Hey, Mr. Barry',
   ])('wakes on "%s"', (text) => {
     expect(WAKE_REGEX.test(text)).toBe(true);
   });
 
-  it.each(['hello there', 'pear', 'barrier', 'paragraph', 'carrot', 'parrots'])(
-    'ignores "%s"',
-    (text) => {
-      expect(WAKE_REGEX.test(text)).toBe(false);
-    },
-  );
+  it.each([
+    'parrot',
+    'hey parrot',
+    'Harol, you coming?',
+    'hey harold',
+    'Barry, shut up',
+    'mr parrots',
+    'mister',
+    'hello there',
+  ])('ignores "%s"', (text) => {
+    expect(WAKE_REGEX.test(text)).toBe(false);
+  });
 });
 
 describe('stripWakeWord', () => {
-  it('drops pre-wake chatter from other speakers and the wake word itself', () => {
-    expect(stripWakeWord('Barry, shut up bro. Dead bread. Hey, Perra. Hop on the call')).toBe(
-      'shut up bro. Dead bread. Hey, Perra. Hop on the call',
+  it('drops pre-wake chatter and the wake phrase itself', () => {
+    expect(stripWakeWord("Hey y'all. Hey, Mister Parrot, are you listening?")).toBe(
+      'are you listening?',
     );
   });
 
-  it('strips through the first wake word only', () => {
-    expect(stripWakeWord('parrot, what time is it')).toBe('what time is it');
-    expect(stripWakeWord('ok parrot — tell perry a joke')).toBe('tell perry a joke');
+  it('strips through the wake phrase only', () => {
+    expect(stripWakeWord('hey mr parrot, tell perry a joke')).toBe('tell perry a joke');
   });
 
-  it('returns empty when only the wake word was said', () => {
-    expect(stripWakeWord('Parrot.')).toBe('');
-    expect(stripWakeWord('parrot?')).toBe('');
+  it('returns empty when only the wake phrase was said', () => {
+    expect(stripWakeWord('Hey, Mister Parrot.')).toBe('');
+    expect(stripWakeWord('hey mr parrot?')).toBe('');
   });
 
-  it('leaves text without a wake word untouched', () => {
+  it('leaves text without a wake phrase untouched', () => {
     expect(stripWakeWord('  what time is it  ')).toBe('what time is it');
   });
 });
