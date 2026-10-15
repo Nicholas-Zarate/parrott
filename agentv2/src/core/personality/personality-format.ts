@@ -68,6 +68,13 @@ Skip: generic small talk, one-off throwaway lines, sensitive details unless clea
 
 When you store something, keep it short, scoped, and neutral — key fact or phrase, not the whole conversation.`;
 
+/** Appended for voice contexts — the reply is spoken aloud via TTS, so keep it short and plain. */
+const VOICE_GUIDANCE = `## Spoken replies
+You are talking out loud in a voice channel — your words are converted to speech.
+- Reply in one or two short sentences. Lead with the answer.
+- Plain spoken words only: no markdown, lists, headers, emojis, links or stage directions.
+- Never read out IDs, URLs or code.`;
+
 // ── Formatter ────────────────────────────────────────────────────────────────
 
 /**
@@ -124,6 +131,10 @@ export function formatPersonalityMarkdown(input: PersonalityInput): string {
 
   // Always append working-memory guidance.
   parts.push(MEMORY_GUIDANCE);
+
+  if (context === 'voice' || context === 'vc') {
+    parts.push(VOICE_GUIDANCE);
+  }
 
   return parts.join('\n\n');
 }

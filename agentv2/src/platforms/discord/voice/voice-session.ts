@@ -34,6 +34,27 @@ export type VoiceState = 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING';
 export const WAKE_REGEX = /\b(?:p[ae]rr?[oa]t?t?|perry|barry)\b/i;
 const WINDOW_TIMEOUT_MS = 30_000;
 const BARGE_IN_SPEECH_PROB = 0.6; // slightly higher than VAD threshold to reduce false positives
+// Safety net only — the voice prompt asks for 1–2 sentences; this stops a runaway reply.
+const VOICE_MAX_OUTPUT_TOKENS = 220;
+
+/**
+ * Drop everything up to and including the first wake word. The IDLE STT stream
+ * hears every speaker, so the first utterance after waking carries pre-wake
+ * chatter from the whole channel; only what follows "parrot" is the request.
+ */
+export function stripWakeWord(text: string): string {
+  const match = WAKE_REGEX.exec(text);
+  if (!match) return text.trim();
+  return text
+    .slice(match.index + match[0].length)
+    .replace(/^[\s,.!?:;—-]+/, '')
+    .trim();
+}
+
+export interface VoiceTurnConfig {
+  modelId: string;
+  instructions: string;
+}
 
 export interface VoiceSessionOptions {
   guildId: string;
@@ -43,6 +64,8 @@ export interface VoiceSessionOptions {
   stt: SttPort;
   /** Resolve the active TtsPort per-turn so feature-flag swaps take effect mid-session. */
   resolveTts: () => TtsPort;
+  /** Resolve the voice model + spoken-mode instructions per-turn (DB-backed, cached). */
+  resolveTurnConfig: () => Promise<VoiceTurnConfig>;
   agent: Agent;
   useMemory: boolean;
   supabase: SupabaseClient;
@@ -65,12 +88,14 @@ export class VoiceSession {
   private sttGeneration = 0; // incremented on each openSttConnection — stale consumers skip reconnect
   private destroyed = false;
   private lastPartialText = ''; // fallback for utteranceEnd when final hasn't arrived yet
+  private awaitingFirstUtterance = false; // true right after wake — strip the wake word from the next final
 
   private readonly player = createAudioPlayer();
   private readonly connection: VoiceConnection;
   private readonly vad: VadPort;
   private readonly stt: SttPort;
   private readonly resolveTts: () => TtsPort;
+  private readonly resolveTurnConfig: () => Promise<VoiceTurnConfig>;
   private readonly agent: Agent;
   private readonly useMemory: boolean;
   private readonly supabase: SupabaseClient;
@@ -84,6 +109,7 @@ export class VoiceSession {
     this.vad = opts.vad;
     this.stt = opts.stt;
     this.resolveTts = opts.resolveTts;
+    this.resolveTurnConfig = opts.resolveTurnConfig;
     this.agent = opts.agent;
     this.useMemory = opts.useMemory;
     this.supabase = opts.supabase;
@@ -249,8 +275,20 @@ export class VoiceSession {
     }
 
     if (this.state === 'LISTENING') {
+      let utterance = text;
+      if (this.awaitingFirstUtterance) {
+        this.awaitingFirstUtterance = false;
+        utterance = stripWakeWord(text);
+        if (!/\w/.test(utterance)) {
+          // Just "parrot" — don't spend a turn answering the wake word; wait for the request.
+          this.logger.log('[Voice] wake word only — waiting for the request');
+          this.awaitingFirstUtterance = true;
+          this.resetWindowTimer();
+          return;
+        }
+      }
       // Full utterance from engaged speaker → run agent
-      void this.runAgent(text);
+      void this.runAgent(utterance);
     }
   }
 
@@ -260,6 +298,7 @@ export class VoiceSession {
     this.engagedUserId = userId;
     this.lastPartialText = '';
     this.sttReconnectAttempts = 0; // fresh window, reset backoff
+    this.awaitingFirstUtterance = wasIdle;
     this.resetWindowTimer();
     if (!wasIdle) {
       // Coming from SPEAKING/THINKING — open a fresh STT connection.
@@ -281,6 +320,7 @@ export class VoiceSession {
     try {
       const { threadId, resourceId } = buildMemoryScope(this.channelId, this.engagedUserId ?? 'unknown');
       const startMs = Date.now();
+      const turn = await this.resolveTurnConfig();
 
       const result = await guildContext.run(this.guildId, () =>
         this.agent.stream(
@@ -288,12 +328,15 @@ export class VoiceSession {
           {
             ...(this.useMemory ? { memory: { thread: threadId, resource: resourceId } } : {}),
             abortSignal: signal,
+            model: turn.modelId,
+            instructions: turn.instructions,
+            modelSettings: { maxOutputTokens: VOICE_MAX_OUTPUT_TOKENS },
           },
         ),
       );
 
       this.state = 'SPEAKING';
-      this.logger.log(`[Voice] → SPEAKING (LLM first token ${Date.now() - startMs}ms)`);
+      this.logger.log(`[Voice] → SPEAKING (stream ready ${Date.now() - startMs}ms, model=${turn.modelId})`);
 
       // Resolve active TTS provider for this turn (honours live feature-flag swap).
       const tts = this.resolveTts();
@@ -301,22 +344,34 @@ export class VoiceSession {
       // Stream tokens → sentence chunks → TTS → Discord player (one continuous stream)
       let fullResponse = '';
       let firstAudioMs: number | null = null;
+      let firstTokenAt: number | null = null;
+      let firstSentenceAt: number | null = null;
 
       const tokenStream = (async function* () {
         for await (const chunk of result.textStream) {
           if (signal.aborted) break;
+          if (firstTokenAt === null) firstTokenAt = Date.now();
           fullResponse += chunk;
           yield chunk;
         }
       })();
 
+      const sentences = (async function* () {
+        for await (const sentence of sentenceChunker(tokenStream)) {
+          if (firstSentenceAt === null) firstSentenceAt = Date.now();
+          yield sentence;
+        }
+      })();
+
       // playTtsStream pipes all sentence chunks into a single AudioResource so the
       // Discord player never stops/restarts between sentences (no audible gaps).
-      const firstAudioAt = await playTtsStream(sentenceChunker(tokenStream), tts, this.player, signal);
-      if (firstAudioAt !== null) {
-        firstAudioMs = firstAudioAt - startMs;
-        this.logger.log(`[Voice] first-audio ${firstAudioMs}ms after user stopped`);
-      }
+      const firstAudioAt = await playTtsStream(sentences, tts, this.player, signal);
+      if (firstAudioAt !== null) firstAudioMs = firstAudioAt - startMs;
+
+      const ms = (t: number | null) => (t === null ? 'n/a' : `${t - startMs}ms`);
+      this.logger.log(
+        `[Voice] timing: first-token=${ms(firstTokenAt)} first-sentence=${ms(firstSentenceAt)} first-audio=${ms(firstAudioAt)}`,
+      );
 
       const interrupted = signal.aborted;
       this.saveTurn({

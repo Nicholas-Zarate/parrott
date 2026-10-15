@@ -78,6 +78,13 @@ describe('formatPersonalityMarkdown (Task 2)', () => {
     expect(result).toContain('You are Parrott in VC');
   });
 
+  it('appends spoken-reply guidance only for voice contexts', () => {
+    const base = { tone: DEFAULT_TONE, sections: [], tools: [] };
+    expect(formatPersonalityMarkdown({ ...base, context: 'voice' })).toContain('## Spoken replies');
+    expect(formatPersonalityMarkdown({ ...base, context: 'vc' })).toContain('## Spoken replies');
+    expect(formatPersonalityMarkdown({ ...base, context: 'text' })).not.toContain('## Spoken replies');
+  });
+
   it('falls back to text tone when vc is empty', () => {
     const toneNoVc: ToneRow = { ...DEFAULT_TONE, vc: '' };
     const result = formatPersonalityMarkdown({

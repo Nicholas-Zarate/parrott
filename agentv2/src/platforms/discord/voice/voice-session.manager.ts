@@ -27,6 +27,7 @@ import { SileroVadService } from '../../../infra/voice/silero-vad.service.js';
 import { DeepgramSttService } from '../../../infra/voice/deepgram-stt.service.js';
 import { DiscordTtsService } from '../../../infra/voice/discord-tts.service.js';
 import { ParrottAgentProvider } from '../../../infra/parrott-agent.provider.js';
+import { PersonalityService } from '../../../infra/personality.service.js';
 import { SUPABASE_CLIENT } from '../../../infra/supabase/supabase.module.js';
 import { VoiceSession } from './voice-session.js';
 import { createJoinVoiceTool } from './join-voice.tool.js';
@@ -41,6 +42,7 @@ export class VoiceSessionManager implements OnModuleInit, OnModuleDestroy {
     private readonly stt: DeepgramSttService,
     private readonly ttsRouter: DiscordTtsService,
     private readonly agentProvider: ParrottAgentProvider,
+    private readonly personality: PersonalityService,
     private readonly client: Client,
     @Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient,
   ) {}
@@ -114,6 +116,11 @@ export class VoiceSessionManager implements OnModuleInit, OnModuleDestroy {
       stt: this.stt,
       // Resolved per-turn inside the session so a mid-session flag flip swaps providers.
       resolveTts: () => this.ttsRouter.forGuild(guildId),
+      // Voice turns use the lighter voice_model and the spoken-mode prompt, not the text-chat config.
+      resolveTurnConfig: async () => ({
+        modelId: await this.personality.getVoiceModel(guildId),
+        instructions: await this.personality.getSystemPrompt('voice', guildId),
+      }),
       agent,
       useMemory,
       supabase: this.supabase,

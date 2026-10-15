@@ -24,6 +24,49 @@ import {
   type AudioPlayer,
 } from '@discordjs/voice';
 import type { TtsPort } from '../../../core/ports/tts.port.js';
+import { createAsyncQueue } from './async-queue.js';
+
+/** Start consuming `source` immediately, buffering items until the caller reads them. */
+export function eagerIterable<T>(source: AsyncIterable<T>, signal: AbortSignal): AsyncIterable<T> {
+  const queue = createAsyncQueue<T>();
+  void (async () => {
+    try {
+      for await (const item of source) {
+        if (signal.aborted) break;
+        queue.push(item);
+      }
+      queue.close();
+    } catch (err) {
+      queue.fail(err);
+    }
+  })();
+  return queue;
+}
+
+/**
+ * Request TTS for each sentence the moment the LLM emits it, instead of after the
+ * previous sentence's audio has fully arrived. Yields per-sentence audio streams in order,
+ * so inter-sentence gaps shrink from a full TTS round-trip to ~nothing.
+ */
+export function prefetchTts(
+  sentences: AsyncIterable<string>,
+  tts: TtsPort,
+  signal: AbortSignal,
+): AsyncIterable<AsyncIterable<Buffer>> {
+  const queue = createAsyncQueue<AsyncIterable<Buffer>>();
+  void (async () => {
+    try {
+      for await (const sentence of sentences) {
+        if (signal.aborted) break;
+        queue.push(eagerIterable(tts.synthesize(sentence), signal));
+      }
+      queue.close();
+    } catch (err) {
+      queue.fail(err);
+    }
+  })();
+  return queue;
+}
 
 /**
  * Play all TTS audio for a text string.
@@ -119,9 +162,9 @@ export async function playTtsStream(
   signal.addEventListener('abort', onAbort, { once: true });
 
   try {
-    for await (const sentence of sentences) {
+    for await (const audio of prefetchTts(sentences, tts, signal)) {
       if (signal.aborted) break;
-      for await (const chunk of tts.synthesize(sentence)) {
+      for await (const chunk of audio) {
         if (signal.aborted) break;
         if (firstAudioAt === null) firstAudioAt = Date.now();
         if (!passthrough.destroyed) passthrough.push(chunk);
