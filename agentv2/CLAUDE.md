@@ -7,8 +7,8 @@ Parrott is a Discord bot for a friend-group server. It responds to @mentions, ha
 ## Repo layout
 
 ```
-agent/      v1 bot — fully implemented and running
-agentv2/    v2 — build plan + design docs (no runtime code yet)
+agent/      v1 bot — dead (old Supabase project lost); code reference only
+agentv2/    v2 — NestJS + Mastra bot; Tasks 0–5 built (see "Current v2 state")
 client/     Next.js dashboard (settings, personality, logs, activities) — shared by v1 and v2
 docs/       v1 planning docs (root) — see voice-pipeline-findings for v2 voice porting
 instructions/ v1 one-off fix plans (root)
@@ -16,7 +16,7 @@ instructions/ v1 one-off fix plans (root)
 
 ## v2 scope
 
-v2 is a TypeScript rewrite of the bot core as a **NestJS application** with **Mastra** as the framework-free AI core. Nothing in `agent/` is replaced yet — v2 is built alongside it.
+v2 is a TypeScript rewrite of the bot core as a **NestJS application** with **Mastra** as the framework-free AI core. v1 (`agent/`) no longer runs — v2 is the only target; use v1 as porting reference.
 
 Three layers (ports & adapters — see `docs/architecture.md`):
 - **Shell = NestJS** — DI, lifecycle/graceful shutdown, cron (`@nestjs/schedule`), the HTTP control edge, security.
@@ -47,6 +47,8 @@ Ports live in `core/ports/`: `IncomingMessage` (plain `{ text, userId, channelId
 - Memory: `@mastra/pg` storage (conversation + working memory) + `PgVector` (semantic recall) + `ModelRouterEmbeddingModel` embedder. See `docs/memory-plan.md`.
 - Instantiated inside a **NestJS provider** (singleton), not scattered `new Agent()` calls.
 
+**Dev run:** `npm run start:dev` = Nest CLI + SWC builder (`nest-cli.json`, `.swcrc`). Old tsx watcher kept as `start:dev:tsc`.
+
 **Shell:** NestJS (long-running process, Docker/PM2/Railway). **Discord:** Necord. **Cron:** `@nestjs/schedule`.
 
 ⚠️ **ESM gotcha:** Mastra is ESM-first, NestJS defaults to CommonJS. Set `moduleResolution: "nodenext"` (+ `module: "nodenext"`) in the agentv2 `tsconfig.json` or `@mastra/core/*` imports break. See [`docs/architecture.md`](docs/architecture.md).
@@ -65,14 +67,14 @@ agentv2/
       personality/           ← formatPersonalityMarkdown + types
       ports/                 ← Replier, VoiceSink, IncomingMessage
     platforms/discord/       ← Necord module; adapters implement core ports
-      mention.update.ts      ← Necord @On('messageCreate') → agent → placeholder + single edit
+      mention.service.ts     ← Necord @On('messageCreate') → agent → placeholder + single edit
       voice/                 ← @discordjs/voice pipeline (implements VoiceSink)
       activity/              ← presence/voice-state listeners → direct model call (not full agent) → deliver
       discord.module.ts
     infra/
       supabase/              ← supabase-js client (reads parrot_* config)
       personality.service.ts ← dynamic config provider (30–60s TTL cache)
-      tts.service.ts, stt.service.ts
+      voice/                 ← deepgram-stt, openai-tts, elevenlabs-tts, silero-vad (RMS gate)
     control/                 ← Nest HTTP controller (guarded): reload, state, trigger
     jobs/                    ← @nestjs/schedule cron (announcements, voice-quick-comment)
   tsconfig.json              ← moduleResolution: nodenext  (ESM gotcha fix)
@@ -85,7 +87,7 @@ Most links are **not** HTTP. Gateway = WebSocket, voice = UDP, memory = TCP Post
 
 ## Current v2 state
 
-Tasks 0–2 complete. Bot runs and connects. See `plan.md` for the full task log.
+Tasks 0–4 complete; Task 5 code complete, live VC gates pending. See `plan.md` for the full task log.
 
 | Task | Status | What's live |
 |------|--------|-------------|
@@ -129,8 +131,8 @@ Tasks 0–2 complete. Bot runs and connects. See `plan.md` for the full task log
 | AI core | Mastra (`@mastra/core`, `@mastra/pg`) — framework-free, no Nest/Discord imports |
 | TS module mode | `moduleResolution: nodenext` + `module: nodenext` (**required** for Mastra ESM under Nest) |
 | LLM models | Mastra Model Router — string-based, no provider packages needed. e.g. `'anthropic/claude-sonnet-4-6'`. Mastra calls provider APIs directly. No `@ai-sdk/*` packages in agentv2. |
-| STT | OpenAI Whisper |
-| TTS | ElevenLabs |
+| STT | Deepgram Nova-3 (streaming, `@deepgram/sdk@3`) |
+| TTS | OpenAI (default); ElevenLabs behind `capability.tts.elevenlabs` flag |
 | Voice | @discordjs/voice, @discordjs/opus, ffmpeg-static |
 | Database | Supabase (Postgres + pgvector + RLS) |
 | Dashboard | Next.js 16 (App Router), React 19, Tailwind v4, shadcn/ui |
