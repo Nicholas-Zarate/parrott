@@ -12,7 +12,7 @@ import {
 import {
   fetchAppDefaultSettings,
   type ScenarioSetting,
-} from "@/lib/activity-trigger-settings";
+} from "@/actions/settings/activityTriggerSettings";
 import { ScenarioSettingsCard } from "@/components/scenario-settings-card";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn } from "@/lib/utils";
@@ -28,16 +28,14 @@ export default function ActivityScenariosPage() {
   const perms = usePermissions();
   const [state, setState] = useState<SettingsState>({ status: "loading" });
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setState({ status: "loading" });
-    fetchAppDefaultSettings()
-      .then((settings) => setState({ status: "success", settings }))
-      .catch((err) =>
-        setState({
-          status: "error",
-          error: err instanceof Error ? err.message : "Failed to load settings",
-        })
-      );
+    const result = await fetchAppDefaultSettings();
+    if (result.error) {
+      setState({ status: "error", error: result.error });
+      return;
+    }
+    setState({ status: "success", settings: result.data ?? [] });
   }, []);
 
   useEffect(() => {

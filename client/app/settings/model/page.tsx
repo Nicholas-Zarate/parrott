@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+
 import {
   fetchRuntimeConfig,
   updateRuntimeConfigModel,
@@ -41,7 +42,7 @@ export default function ModelPage() {
   const [state, setState] = useState<ModelState>({ status: "loading" });
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setState({ status: "loading" });
     fetchRuntimeConfig()
       .then((config) =>

@@ -12,7 +12,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ExpandableText } from "@/components/expandable-text";
-import { updateToneDescription, updateToneActive } from "@/lib/parrot-tones";
+import { updateToneDescription, updateToneActive } from "@/actions/personality/updateTone";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { FileText, Mic } from "lucide-react";

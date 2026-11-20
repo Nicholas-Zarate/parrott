@@ -1,6 +1,7 @@
 /**
+ * @deprecated Data access moved to Server Actions. Use @/actions/settings/roastConfig instead.
+ * This file is kept for reference; types are duplicated in the action module.
  * Client-side fetch/update for parrot_roast_config (roast type weights and game streak min).
- * Used by the Personality page Roast tab. Agent reads this table at startup when refreshPromptConfig runs.
  */
 
 import { createClient } from "@/lib/supabase/client";

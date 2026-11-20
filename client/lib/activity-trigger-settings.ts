@@ -1,6 +1,6 @@
 /**
+ * @deprecated Data access moved to Server Actions. Use @/actions/settings/activityTriggerSettings instead.
  * Client-side fetch/upsert for activity_trigger_settings (app defaults: guild_id = null).
- * Used by the Scenarios page to show and edit per-trigger delivery toggles and cooldown.
  */
 
 import { createClient } from "@/lib/supabase/client";

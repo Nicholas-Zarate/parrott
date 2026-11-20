@@ -1,6 +1,6 @@
 /**
+ * @deprecated Data access moved to Server Actions. Use @/actions/settings/voiceDimensions instead.
  * Client-side fetch/upsert for parrot_voice_dimensions (voice style sliders).
- * Used by the Personality → Voice style tab. Admins/editors can update.
  */
 
 import { createClient } from "@/lib/supabase/client";
